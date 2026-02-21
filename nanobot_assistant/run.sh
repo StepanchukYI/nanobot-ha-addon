@@ -25,14 +25,6 @@ cleanup() {
 }
 trap cleanup SIGTERM SIGINT
 
-# --- Timezone ---
-TIMEZONE=$(jq -r '.timezone // "Europe/Kiev"' /data/options.json 2>/dev/null)
-if [ -f "/usr/share/zoneinfo/${TIMEZONE}" ]; then
-    ln -sf "/usr/share/zoneinfo/${TIMEZONE}" /etc/localtime
-    echo "${TIMEZONE}" > /etc/timezone
-    echo "[INFO] Timezone: ${TIMEZONE}"
-fi
-
 # --- Directories & symlinks ---
 mkdir -p "${NANOBOT_HOME}" "${NANOBOT_HOME}/workspace" "${NANOBOT_HOME}/skills" "/data/.nanobot"
 
@@ -51,6 +43,14 @@ ${PYTHON} /generate_config.py
 ln -sf "${CONFIG_FILE}" "/data/.nanobot/config.json" 2>/dev/null || true
 ln -sfn "${CONFIG_FILE}" "${HA_CONFIG_DIR}/config.json" 2>/dev/null || true
 
+# --- Timezone (from config.json or default) ---
+TIMEZONE=$(jq -r '.timezone // "Europe/Kiev"' "${CONFIG_FILE}" 2>/dev/null)
+if [ -f "/usr/share/zoneinfo/${TIMEZONE}" ]; then
+    ln -sf "/usr/share/zoneinfo/${TIMEZONE}" /etc/localtime
+    echo "${TIMEZONE}" > /etc/timezone
+    echo "[INFO] Timezone: ${TIMEZONE}"
+fi
+
 # --- Validate config ---
 if [ ! -f "${CONFIG_FILE}" ]; then
     echo "[ERROR] Config file not found after generation."
@@ -67,7 +67,7 @@ fi
 
 # --- Banner ---
 echo "=============================================="
-echo " 🐈 Nanobot Assistant v0.1.4"
+echo " 🐈 Nanobot Assistant v0.1.5"
 echo " Web UI:   http://0.0.0.0:8080  (HA Ingress)"
 echo " Gateway:  http://0.0.0.0:18790"
 echo " Provider: $(jq -r '.providers | keys[0] // "none"' "${CONFIG_FILE}" 2>/dev/null)"

@@ -59,6 +59,7 @@ def create_default_config():
             "host": "0.0.0.0",
             "port": 18790,
         },
+        "timezone": "Europe/Kiev",
     }
 
 
