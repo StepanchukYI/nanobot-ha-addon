@@ -1,0 +1,53 @@
+name: "Nanobot Assistant"
+description: "Ultra-lightweight AI personal assistant for Home Assistant powered by Zhipu GLM / OpenRouter / Anthropic and other LLM providers. MCP support, Telegram integration, scheduled tasks."
+version: "0.1.0"
+slug: "nanobot_assistant"
+url: "https://github.com/HKUDS/nanobot"
+arch:
+  - aarch64
+  - amd64
+  - armv7
+init: false
+startup: application
+boot: auto
+map:
+  - config:rw
+  - ssl:ro
+ports:
+  18790/tcp: 18790
+  8080/tcp: 8080
+ports_description:
+  18790/tcp: "Nanobot Gateway"
+  8080/tcp: "Web UI (chat, settings, logs)"
+options:
+  llm_provider: "zhipu"
+  llm_api_key: ""
+  llm_model: "zai/glm-4-flash"
+  llm_api_base: "https://open.bigmodel.cn/api/coding/paas/v4"
+  telegram_enabled: false
+  telegram_token: ""
+  telegram_allow_from: []
+  web_search_api_key: ""
+  ha_mcp_enabled: true
+  ha_mcp_url: "http://homeassistant.local.hass.io:8123/api/mcp"
+  ha_mcp_token: ""
+  timezone: "Europe/Kiev"
+schema:
+  llm_provider: str
+  llm_api_key: password
+  llm_model: str
+  llm_api_base: url
+  telegram_enabled: bool
+  telegram_token: password?
+  telegram_allow_from:
+    - str
+  web_search_api_key: password?
+  ha_mcp_enabled: bool
+  ha_mcp_url: url
+  ha_mcp_token: password?
+  timezone: str
+panel_icon: "mdi:robot-happy"
+panel_title: "Nanobot"
+ingress: true
+ingress_port: 8080
+ingress_stream: true
