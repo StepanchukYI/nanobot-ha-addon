@@ -67,7 +67,7 @@ fi
 
 # --- Banner ---
 echo "=============================================="
-echo " 🐈 Nanobot Assistant v0.1.3"
+echo " 🐈 Nanobot Assistant v0.1.4"
 echo " Web UI:   http://0.0.0.0:8080  (HA Ingress)"
 echo " Gateway:  http://0.0.0.0:18790"
 echo " Provider: $(jq -r '.providers | keys[0] // "none"' "${CONFIG_FILE}" 2>/dev/null)"

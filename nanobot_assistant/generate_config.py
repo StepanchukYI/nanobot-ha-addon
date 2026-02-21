@@ -27,13 +27,14 @@ def create_default_config():
     """Create a starter config template."""
     return {
         "providers": {
-            "openrouter": {
-                "apiKey": "YOUR_API_KEY_HERE"
+            "zhipu": {
+                "apiKey": "YOUR_API_KEY_HERE",
+                "apiBase": "https://open.bigmodel.cn/api/coding/paas/v4"
             }
         },
         "agents": {
             "defaults": {
-                "model": "anthropic/claude-sonnet-4",
+                "model": "zai/glm-4-flash",
                 "workspace": os.path.join(NANOBOT_HOME, "workspace"),
                 "maxTokens": 8192,
                 "temperature": 0.7,
@@ -45,6 +46,14 @@ def create_default_config():
         "tools": {
             "exec": {"timeout": 60},
             "restrictToWorkspace": True,
+            "mcpServers": {
+                "homeassistant": {
+                    "url": "http://homeassistant.local.hass.io:8123/api/mcp",
+                    "headers": {
+                        "Authorization": "Bearer YOUR_HA_TOKEN_HERE"
+                    }
+                }
+            }
         },
         "gateway": {
             "host": "0.0.0.0",
