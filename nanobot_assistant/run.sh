@@ -75,7 +75,7 @@ fi
 
 # --- Banner ---
 echo "=============================================="
-echo " Nanobot Assistant v0.1.10"
+echo " Nanobot Assistant v0.1.11"
 echo " Config:   ${NANOBOT_HOME}/"
 echo " Web UI:   http://0.0.0.0:8080  (HA Ingress)"
 echo " Gateway:  http://0.0.0.0:18790"

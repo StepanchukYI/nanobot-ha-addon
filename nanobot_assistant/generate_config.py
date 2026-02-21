@@ -142,7 +142,7 @@ def apply_mcp_options(config, mcp):
 
     if enabled and token:
         servers["homeassistant"] = {
-            "url": url or "http://homeassistant.local.hass.io:8123/api/mcp",
+            "url": url or "http://localhost:8123/api/mcp",
             "headers": {
                 "Authorization": f"Bearer {token}",
             },
@@ -154,10 +154,13 @@ def apply_mcp_options(config, mcp):
 
 def apply_advanced_options(config, advanced):
     """Apply Advanced section from HA options (timezone handled by run.sh)."""
+    system_prompt = advanced.get("system_prompt", "").strip()
     max_tokens = advanced.get("max_tokens")
     temperature = advanced.get("temperature")
 
     defaults = config.setdefault("agents", {}).setdefault("defaults", {})
+    if system_prompt:
+        defaults["systemPrompt"] = system_prompt
     if max_tokens is not None:
         defaults["maxTokens"] = int(max_tokens)
     if temperature is not None:
