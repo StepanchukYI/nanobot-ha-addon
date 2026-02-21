@@ -6,13 +6,16 @@
 
 Ultra-lightweight AI assistant for Home Assistant, powered by [nanobot](https://github.com/HKUDS/nanobot) (~4,000 lines of code, ~100 MB RAM).
 
+Works with **any OpenAI-compatible LLM provider** — OpenRouter, Anthropic, OpenAI, DeepSeek, Gemini, Zhipu, Ollama, and more.
+
 ## Features
 
-- **Zhipu GLM / OpenRouter / Anthropic / DeepSeek** — multi-provider LLM support
-- **Home Assistant MCP** — direct control of your smart home devices via AI
-- **Telegram** — chat with your home assistant from anywhere
+- **Any LLM provider** — OpenRouter, Anthropic, OpenAI, DeepSeek, Gemini, Zhipu, Ollama, or any OpenAI-compatible API
+- **Home Assistant MCP** — direct AI control of your smart home devices (lights, climate, switches, etc.)
+- **Telegram** — chat with your home from anywhere, restrict access by user ID
 - **Scheduled Tasks** — automated morning briefings, reminders, periodic reports
 - **MCP Support** — connect any MCP server for extended capabilities
+- **Custom System Prompt** — personalize your assistant's personality and knowledge
 - **Persistent Storage** — config and memory survive addon updates
 
 ## Quick Install
@@ -20,43 +23,47 @@ Ultra-lightweight AI assistant for Home Assistant, powered by [nanobot](https://
 1. **Settings → Add-ons → Add-on Store → ⋮ → Repositories**
 2. Add: `https://github.com/StepanchukYI/nanobot-ha-addon`
 3. Find and install **Nanobot Assistant**
-4. Configure your API key and start
+4. Configure your LLM provider and API key, then start
 
-## Configuration
+## Supported Providers
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `llm_provider` | LLM provider name | `zhipu` |
-| `llm_api_key` | API key for LLM provider | (required) |
-| `llm_model` | Model identifier | `zai/glm-4-flash` |
-| `llm_api_base` | API base URL | Zhipu coding plan URL |
-| `telegram_enabled` | Enable Telegram bot | `false` |
-| `telegram_token` | Telegram bot token | |
-| `telegram_allow_from` | Allowed Telegram user IDs | `[]` |
-| `ha_mcp_enabled` | Enable HA MCP integration | `true` |
-| `ha_mcp_url` | Home Assistant MCP endpoint | `http://homeassistant.local.hass.io:8123/api/mcp` |
-| `ha_mcp_token` | HA Long-Lived Access Token | |
+| Provider | Config key | Example model | Notes |
+|----------|-----------|---------------|-------|
+| **OpenRouter** | `openrouter` | `anthropic/claude-sonnet-4` | Access to 100+ models via single API key |
+| **Anthropic** | `anthropic` | `claude-sonnet-4-5` | Direct Anthropic API |
+| **OpenAI** | `openai` | `gpt-4o` | GPT models |
+| **DeepSeek** | `deepseek` | `deepseek-chat` | Budget-friendly, strong reasoning |
+| **Gemini** | `gemini` | `gemini-2.5-flash` | Google's models |
+| **Zhipu AI** | `zhipu` | `zai/glm-4-flash` | Cheapest option, great for basic smart home tasks |
+| **Ollama** | `vllm` | any local model | Run locally, no API costs |
+
+> **Tip:** Zhipu GLM-4-Flash is set as default because it's the cheapest option that handles smart home control well. Switch to any other provider for more advanced conversations.
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────┐
-│           Raspberry Pi 4 (8GB)          │
+│              Home Assistant              │
 │                                         │
 │  ┌──────────────┐  ┌────────────────┐   │
-│  │    Home       │  │   Nanobot      │   │
-│  │  Assistant    │◄─│  Assistant     │   │
-│  │              │  │  (HA Addon)    │   │
-│  │  MCP Server  │  │               │   │
-│  └──────────────┘  │  GLM-4-Flash  │   │
+│  │  HA Core     │  │   Nanobot      │   │
+│  │              │◄─│  Assistant     │   │
+│  │  MCP Server  │  │  (Add-on)     │   │
+│  │  integration │  │               │   │
+│  └──────────────┘  │  Any LLM      │   │
 │                     │  Telegram     │   │
 │                     │  MCP Client   │   │
 │                     └────────────────┘   │
 └─────────────────────────────────────────┘
             │                    │
             ▼                    ▼
-     Local network         Zhipu AI API
+     Smart home             LLM API
+     devices             (your choice)
 ```
+
+## Documentation
+
+See [DOCS.md](nanobot_assistant/DOCS.md) for full configuration reference.
 
 ## License
 
