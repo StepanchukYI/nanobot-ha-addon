@@ -132,7 +132,12 @@ def apply_telegram_options(config, telegram):
 
 
 def apply_mcp_options(config, mcp):
-    """Apply Home Assistant MCP section from HA options."""
+    """Apply Home Assistant MCP section from HA options.
+
+    Uses mcp-proxy as a stdio-to-Streamable-HTTP bridge.
+    nanobot connects to mcp-proxy via stdio, mcp-proxy connects to HA via HTTP.
+    This avoids protocol-level incompatibilities with direct Streamable HTTP.
+    """
     enabled = mcp.get("enabled", False)
     url = mcp.get("url", "").strip()
     token = mcp.get("token", "").strip()
@@ -141,10 +146,16 @@ def apply_mcp_options(config, mcp):
     servers = tools.setdefault("mcpServers", {})
 
     if enabled and token:
+        mcp_url = url or "http://localhost:8123/api/mcp"
         servers["homeassistant"] = {
-            "url": url or "http://localhost:8123/api/mcp",
-            "headers": {
-                "Authorization": f"Bearer {token}",
+            "command": "/opt/nanobot-venv/bin/mcp-proxy",
+            "args": [
+                "--transport=streamablehttp",
+                "--stateless",
+                mcp_url,
+            ],
+            "env": {
+                "API_ACCESS_TOKEN": token,
             },
         }
     else:

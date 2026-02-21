@@ -17,7 +17,7 @@ RUN python3 -m venv /opt/nanobot-venv
 
 # Install nanobot
 RUN /opt/nanobot-venv/bin/pip install --no-cache-dir --upgrade pip && \
-    /opt/nanobot-venv/bin/pip install --no-cache-dir "nanobot-ai>=0.1.4"
+    /opt/nanobot-venv/bin/pip install --no-cache-dir "nanobot-ai>=0.1.4" "mcp-proxy>=0.3.0"
 
 # Create persistent directories
 RUN mkdir -p /data/nanobot /data/nanobot/workspace /data/nanobot/skills /data/.nanobot
