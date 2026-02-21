@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1 (2026-02-21)
+
+### Fixed
+
+- Fix Docker build: correct COPY paths (webserver.py → webui.py, remove missing web/ dir)
+- Fix run.sh: reference correct webui.py filename
+
 ## 0.1.0 (2026-02-21)
 
 ### Initial Release
