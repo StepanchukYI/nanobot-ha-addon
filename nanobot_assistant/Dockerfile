@@ -22,11 +22,10 @@ RUN /opt/nanobot-venv/bin/pip install --no-cache-dir --upgrade pip && \
 # Create persistent directories
 RUN mkdir -p /data/nanobot /data/nanobot/workspace /data/nanobot/skills /data/.nanobot
 
-# Copy addon scripts and web UI
+# Copy addon scripts
 COPY run.sh /
 COPY generate_config.py /
-COPY webserver.py /
-COPY web/ /web/
+COPY webui.py /
 RUN chmod a+x /run.sh
 
 # Healthcheck

@@ -66,7 +66,7 @@ echo "=============================================="
 
 # --- Start Web UI ---
 echo "[INFO] Starting Web UI server..."
-${PYTHON} /webserver.py 2>&1 &
+${PYTHON} /webui.py 2>&1 &
 WEB_PID=$!
 echo "[INFO] Web UI started (PID: ${WEB_PID})"
 
