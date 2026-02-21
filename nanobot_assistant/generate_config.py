@@ -11,7 +11,7 @@ import os
 import copy
 
 OPTIONS_FILE = "/data/options.json"
-NANOBOT_HOME = "/data/nanobot"
+NANOBOT_HOME = "/config/nanobot"
 CONFIG_FILE = os.path.join(NANOBOT_HOME, "config.json")
 
 # Provider presets: apiBase URLs for known providers
@@ -74,7 +74,6 @@ def create_default_config():
             "host": "0.0.0.0",
             "port": 18790,
         },
-        "timezone": "Europe/Kiev",
     }
 
 
@@ -153,13 +152,9 @@ def apply_mcp_options(config, mcp):
 
 
 def apply_advanced_options(config, advanced):
-    """Apply Advanced section from HA options."""
-    tz = advanced.get("timezone", "").strip()
+    """Apply Advanced section from HA options (timezone handled by run.sh)."""
     max_tokens = advanced.get("max_tokens")
     temperature = advanced.get("temperature")
-
-    if tz:
-        config["timezone"] = tz
 
     defaults = config.setdefault("agents", {}).setdefault("defaults", {})
     if max_tokens is not None:
@@ -201,6 +196,9 @@ def main():
 
     # Ensure gateway config
     config.setdefault("gateway", {"host": "0.0.0.0", "port": 18790})
+
+    # Remove fields that nanobot's Pydantic model doesn't accept
+    config.pop("timezone", None)
 
     # Write config
     with open(CONFIG_FILE, "w") as f:

@@ -4,7 +4,9 @@
 # Manages: Web UI (port 8080) + Nanobot Gateway (port 18790)
 # ============================================================
 
-NANOBOT_HOME="/data/nanobot"
+# /config = addon_config (visible from other addons like File Editor, VS Code)
+# /data   = addon private data (only visible inside this container)
+NANOBOT_HOME="/config/nanobot"
 NANOBOT_BIN="/opt/nanobot-venv/bin/nanobot"
 PYTHON="/opt/nanobot-venv/bin/python3"
 CONFIG_FILE="${NANOBOT_HOME}/config.json"
@@ -25,24 +27,25 @@ cleanup() {
 }
 trap cleanup SIGTERM SIGINT
 
-# --- Directories & symlinks ---
+# --- Create directories ---
 mkdir -p "${NANOBOT_HOME}" "${NANOBOT_HOME}/workspace" "${NANOBOT_HOME}/skills" "/data/.nanobot"
 
-# --- Expose user-editable files in /config/ (addon_config) ---
-ADDON_CONFIG_DIR="/config"
-ln -sfn "${NANOBOT_HOME}/skills"    "${ADDON_CONFIG_DIR}/skills"
-ln -sfn "${NANOBOT_HOME}/workspace" "${ADDON_CONFIG_DIR}/workspace"
-ln -sfn "${NANOBOT_HOME}/gateway.log" "${ADDON_CONFIG_DIR}/gateway.log" 2>/dev/null || true
-echo "[INFO] User files exposed at addon config folder"
+# --- Migrate from old /data/nanobot location if exists ---
+if [ -d "/data/nanobot" ] && [ ! -L "/data/nanobot" ]; then
+    echo "[INFO] Migrating data from /data/nanobot to ${NANOBOT_HOME}..."
+    cp -rn /data/nanobot/* "${NANOBOT_HOME}/" 2>/dev/null || true
+    rm -rf /data/nanobot
+    echo "[INFO] Migration complete."
+fi
 
 # --- Generate / merge config from HA options ---
 echo "[INFO] Generating config..."
 ${PYTHON} /generate_config.py
+# Symlink for nanobot CLI which reads from ~/.nanobot/config.json
 ln -sf "${CONFIG_FILE}" "/data/.nanobot/config.json" 2>/dev/null || true
-ln -sfn "${CONFIG_FILE}" "${ADDON_CONFIG_DIR}/config.json" 2>/dev/null || true
 
-# --- Timezone ---
-TIMEZONE=$(jq -r '.timezone // "Europe/Kiev"' "${CONFIG_FILE}" 2>/dev/null)
+# --- Timezone (from HA options) ---
+TIMEZONE=$(jq -r '.advanced.timezone // "Europe/Kiev"' /data/options.json 2>/dev/null)
 if [ -f "/usr/share/zoneinfo/${TIMEZONE}" ]; then
     ln -sf "/usr/share/zoneinfo/${TIMEZONE}" /etc/localtime
     echo "${TIMEZONE}" > /etc/timezone
@@ -54,13 +57,14 @@ API_KEY=$(jq -r '.providers | to_entries[0].value.apiKey // empty' "${CONFIG_FIL
 if [ -z "${API_KEY}" ]; then
     echo "=============================================="
     echo "[WARN] No LLM API key configured!"
-    echo "[WARN] Set your API key in Settings → Add-ons → Nanobot Assistant → Configuration"
+    echo "[WARN] Set your API key in Settings -> Add-ons -> Nanobot Assistant -> Configuration"
     echo "=============================================="
 fi
 
 # --- Banner ---
 echo "=============================================="
-echo " 🐈 Nanobot Assistant v0.1.7"
+echo " Nanobot Assistant v0.1.8"
+echo " Config:   ${NANOBOT_HOME}/"
 echo " Web UI:   http://0.0.0.0:8080  (HA Ingress)"
 echo " Gateway:  http://0.0.0.0:18790"
 echo " Provider: $(jq -r '.providers | keys[0] // "none"' "${CONFIG_FILE}" 2>/dev/null)"
