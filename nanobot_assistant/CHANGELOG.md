@@ -11,7 +11,7 @@
 
 ### Changed
 
-- Upgraded nanobot-ai to v0.1.4.post1 (media support)
+- Upgraded nanobot-ai to v0.1.4
 - `generate_config.py` now always merges HA options into config.json instead of only creating on first run
 
 ### Fixed
