@@ -126,8 +126,8 @@ def apply_telegram_options(config, telegram):
             "token": token,
             "allowFrom": allow_from,
         }
-    elif not enabled:
-        # Remove telegram channel if disabled
+    else:
+        # Remove telegram if disabled or no token
         config.setdefault("channels", {}).pop("telegram", None)
 
 
@@ -147,7 +147,8 @@ def apply_mcp_options(config, mcp):
                 "Authorization": f"Bearer {token}",
             },
         }
-    elif not enabled:
+    else:
+        # Remove MCP if disabled or no token (prevents crash on placeholder)
         servers.pop("homeassistant", None)
 
 
