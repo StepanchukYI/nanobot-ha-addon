@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.1.7 (2026-02-21)
+
+### Added
+
+- Accordion-style configuration UI (LLM, Telegram, Home Assistant MCP, Advanced sections)
+- HA Settings panel now controls all Nanobot config — no manual JSON editing required
+- Config merges HA options into `config.json` on every restart (manual edits preserved)
+- Provider presets with auto-filled API base URLs for Zhipu, OpenRouter, OpenAI, Anthropic, DeepSeek, Gemini, Ollama
+
+### Changed
+
+- Upgraded nanobot-ai to v0.1.4.post1 (media support)
+- `generate_config.py` now always merges HA options into config.json instead of only creating on first run
+
+### Fixed
+
+- Config folder mapping (`addon_config:rw`) for proper `/config/` access
+- Warning messages now point to HA Settings instead of manual file editing
+
 ## 0.1.3 (2026-02-21)
 
 ### Added

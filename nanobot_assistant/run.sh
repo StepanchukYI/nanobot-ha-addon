@@ -35,13 +35,13 @@ ln -sfn "${NANOBOT_HOME}/workspace" "${ADDON_CONFIG_DIR}/workspace"
 ln -sfn "${NANOBOT_HOME}/gateway.log" "${ADDON_CONFIG_DIR}/gateway.log" 2>/dev/null || true
 echo "[INFO] User files exposed at addon config folder"
 
-# --- Generate default config (first run only) ---
-echo "[INFO] Checking config..."
+# --- Generate / merge config from HA options ---
+echo "[INFO] Generating config..."
 ${PYTHON} /generate_config.py
 ln -sf "${CONFIG_FILE}" "/data/.nanobot/config.json" 2>/dev/null || true
 ln -sfn "${CONFIG_FILE}" "${ADDON_CONFIG_DIR}/config.json" 2>/dev/null || true
 
-# --- Timezone (from config.json or default) ---
+# --- Timezone ---
 TIMEZONE=$(jq -r '.timezone // "Europe/Kiev"' "${CONFIG_FILE}" 2>/dev/null)
 if [ -f "/usr/share/zoneinfo/${TIMEZONE}" ]; then
     ln -sf "/usr/share/zoneinfo/${TIMEZONE}" /etc/localtime
@@ -49,23 +49,18 @@ if [ -f "/usr/share/zoneinfo/${TIMEZONE}" ]; then
     echo "[INFO] Timezone: ${TIMEZONE}"
 fi
 
-# --- Validate config ---
-if [ ! -f "${CONFIG_FILE}" ]; then
-    echo "[ERROR] Config file not found after generation."
-    echo "[ERROR] Web UI will start anyway for manual configuration."
-fi
-
+# --- Check API key ---
 API_KEY=$(jq -r '.providers | to_entries[0].value.apiKey // empty' "${CONFIG_FILE}" 2>/dev/null)
 if [ -z "${API_KEY}" ]; then
     echo "=============================================="
     echo "[WARN] No LLM API key configured!"
-    echo "[WARN] Edit /config/nanobot/config.json to set your API key."
+    echo "[WARN] Set your API key in Settings → Add-ons → Nanobot Assistant → Configuration"
     echo "=============================================="
 fi
 
 # --- Banner ---
 echo "=============================================="
-echo " 🐈 Nanobot Assistant v0.1.6"
+echo " 🐈 Nanobot Assistant v0.1.7"
 echo " Web UI:   http://0.0.0.0:8080  (HA Ingress)"
 echo " Gateway:  http://0.0.0.0:18790"
 echo " Provider: $(jq -r '.providers | keys[0] // "none"' "${CONFIG_FILE}" 2>/dev/null)"
@@ -86,7 +81,7 @@ if [ -n "${API_KEY}" ]; then
     GW_PID=$!
     echo "[INFO] Gateway started (PID: ${GW_PID})"
 else
-    echo "[INFO] Gateway NOT started (no API key). Edit /config/nanobot/config.json"
+    echo "[INFO] Gateway NOT started (no API key). Configure in HA Settings."
 fi
 
 # --- Wait for processes ---
