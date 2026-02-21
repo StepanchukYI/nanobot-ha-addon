@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.3 (2026-02-21)
+
+### Added
+
+- Expose user-editable files at `/config/nanobot/` (skills, workspace, config, logs)
+- Config-as-file: all settings via `/config/nanobot/config.json` instead of HA form
+- Translate DOCS.md to English
+
+### Fixed
+
+- Fix BUILD_FROM arg override in build.yaml
+
 ## 0.1.1 (2026-02-21)
 
 ### Fixed

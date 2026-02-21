@@ -1,89 +1,133 @@
 # Nanobot Assistant — Home Assistant Add-on
 
-Ультралёгкий AI-ассистент для управления умным домом. ~4000 строк кода, ~100 МБ RAM.
+Ultra-lightweight AI assistant for smart home control. ~4000 lines of code, ~100 MB RAM.
 
-## Первый запуск
+## Getting Started
 
-1. Установите add-on из репозитория
-2. Перейдите в **Конфигурация** add-on
-3. Укажите обязательные параметры:
-   - `llm_api_key` — API ключ Zhipu AI (получить на [open.bigmodel.cn](https://open.bigmodel.cn))
-   - `llm_model` — модель (по умолчанию `zai/glm-4-flash`)
-4. Нажмите **Сохранить**, затем **Запустить**
+1. Install the add-on from the repository
+2. Start the add-on
+3. Open **File Editor** and edit `/config/nanobot/config.json`
+4. Set your LLM provider and API key:
 
-## Настройка Telegram
+```json
+{
+  "providers": {
+    "openrouter": {
+      "apiKey": "sk-or-v1-..."
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": "anthropic/claude-sonnet-4"
+    }
+  }
+}
+```
 
-1. Создайте бота через `@BotFather` в Telegram
-2. Скопируйте токен бота
-3. Узнайте свой User ID через `@userinfobot`
-4. В конфигурации add-on:
-   - `telegram_enabled` → `true`
-   - `telegram_token` → ваш токен
-   - `telegram_allow_from` → ваш User ID
-5. Перезапустите add-on
+5. Restart the add-on
 
-## Настройка Home Assistant MCP
+## Configuration
 
-Для управления устройствами через AI-бота:
+All configuration is done via `/config/nanobot/config.json`. The add-on creates
+a default template on first run. Edit it using File Editor, Samba, or SSH.
 
-1. Установите интеграцию **Model Context Protocol Server** в Home Assistant
-2. Создайте Long-Lived Access Token:
-   - Профиль → Токены долгосрочного доступа → Создать
-3. В конфигурации add-on:
-   - `ha_mcp_enabled` → `true`
-   - `ha_mcp_token` → ваш токен
-4. Перезапустите add-on
+The add-on only reads `timezone` from the HA add-on settings panel.
 
-## Поддерживаемые LLM провайдеры
+## Supported LLM Providers
 
-| Провайдер | llm_provider | Пример модели |
-|-----------|-------------|---------------|
-| Zhipu AI  | `zhipu`     | `zai/glm-4-flash`, `zai/glm-4` |
+| Provider | Key in config | Example Model |
+|----------|--------------|---------------|
 | OpenRouter | `openrouter` | `anthropic/claude-sonnet-4` |
-| OpenAI    | `openai`    | `gpt-4o` |
-| DeepSeek  | `deepseek`  | `deepseek-chat` |
+| OpenAI | `openai` | `gpt-4o` |
 | Anthropic | `anthropic` | `claude-sonnet-4-5` |
-| Gemini    | `gemini`    | `gemini-2.5-flash` |
-| Ollama (local) | `vllm` | любая локальная модель |
+| DeepSeek | `deepseek` | `deepseek-chat` |
+| Zhipu AI | `zhipu` | `zai/glm-4-flash` |
+| Gemini | `gemini` | `gemini-2.5-flash` |
+| Ollama (local) | `vllm` | any local model |
 
-Для смены провайдера измените `llm_provider`, `llm_api_key`, `llm_model` и `llm_api_base`.
+## Telegram Setup
 
-## MCP серверы
+Add to your `config.json`:
 
-Nanobot поддерживает подключение любых MCP-серверов. Для расширенной настройки
-отредактируйте `/data/nanobot/config.json` через SSH или File Editor.
+```json
+{
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "token": "123456:ABC-...",
+      "allowFrom": ["your_user_id"]
+    }
+  }
+}
+```
+
+Get your bot token from `@BotFather` and your User ID from `@userinfobot`.
+
+## Home Assistant MCP Setup
+
+1. Install the **Model Context Protocol Server** integration in Home Assistant
+2. Create a Long-Lived Access Token: Profile → Long-Lived Access Tokens → Create
+3. Add to your `config.json`:
+
+```json
+{
+  "tools": {
+    "mcpServers": {
+      "homeassistant": {
+        "url": "http://homeassistant.local.hass.io:8123/api/mcp",
+        "headers": {
+          "Authorization": "Bearer YOUR_TOKEN"
+        }
+      }
+    }
+  }
+}
+```
+
+## User Files
+
+The add-on exposes its working files at `/config/nanobot/`:
+
+- `config.json` — full nanobot configuration
+- `skills/` — custom bot skills
+- `workspace/` — agent working directory, memory
+- `gateway.log` — gateway log file
+
+The config is never overwritten by the add-on after first creation.
+
+## MCP Servers
+
+Nanobot supports connecting any MCP servers. Add them to
+`tools.mcpServers` in `/config/nanobot/config.json`.
 
 ## Scheduled Tasks (Cron)
 
-Задачи можно добавлять через Telegram, отправив боту сообщение вида:
+You can add tasks via Telegram by sending a message like:
 
 ```
-Каждое утро в 8:00 присылай мне сводку температуры в доме
+Every morning at 8:00 send me a summary of house temperatures
 ```
 
-Или через CLI:
+Or via CLI:
 
 ```
-nanobot cron add --name "morning" --message "Сводка температур" --cron "0 8 * * *"
+nanobot cron add --name "morning" --message "Temperature summary" --cron "0 8 * * *"
 ```
 
 ## Troubleshooting
 
-**Бот не отвечает:**
-- Проверьте API ключ в конфигурации
-- Проверьте логи add-on
+**Bot not responding:**
+- Check the API key in `/config/nanobot/config.json`
+- Check the add-on logs
 
-**Telegram не работает:**
-- Убедитесь что токен корректный
-- Проверьте что User ID в `telegram_allow_from`
+**Telegram not working:**
+- Make sure the bot token is correct
+- Verify your User ID is in `allowFrom`
 
-**MCP не подключается:**
-- Убедитесь что интеграция MCP Server установлена в HA
-- Проверьте Long-Lived Access Token
-- URL по умолчанию: `http://homeassistant.local.hass.io:8123/api/mcp`
+**MCP not connecting:**
+- Make sure the MCP Server integration is installed in HA
+- Check your Long-Lived Access Token
 
-## Данные
+## Data
 
-Все данные хранятся в `/data/nanobot/` и переживают обновления add-on:
-- `config.json` — конфигурация
-- `workspace/` — рабочая директория агента, память, навыки
+All data is stored persistently and accessible at `/config/nanobot/` for easy editing.

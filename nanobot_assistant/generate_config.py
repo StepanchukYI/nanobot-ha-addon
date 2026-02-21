@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Generate nanobot config.json from Home Assistant add-on options."""
+"""Generate default nanobot config.json on first run only.
+
+All configuration is done by the user via /config/nanobot/config.json
+(File Editor, Samba, SSH). This script only creates a starter template
+if no config exists yet.
+"""
 
 import json
 import os
@@ -11,21 +16,24 @@ CONFIG_FILE = os.path.join(NANOBOT_HOME, "config.json")
 
 
 def load_options():
-    """Load HA addon options."""
+    """Load HA addon options (timezone only)."""
     if not os.path.exists(OPTIONS_FILE):
-        print("[ERROR] options.json not found", file=sys.stderr)
-        sys.exit(1)
+        return {}
     with open(OPTIONS_FILE, "r") as f:
         return json.load(f)
 
 
-def build_config(opts):
-    """Build nanobot config from HA addon options."""
-    config = {
-        "providers": {},
+def create_default_config():
+    """Create a starter config template."""
+    return {
+        "providers": {
+            "openrouter": {
+                "apiKey": "YOUR_API_KEY_HERE"
+            }
+        },
         "agents": {
             "defaults": {
-                "model": opts.get("llm_model", "zai/glm-4-flash"),
+                "model": "anthropic/claude-sonnet-4",
                 "workspace": os.path.join(NANOBOT_HOME, "workspace"),
                 "maxTokens": 8192,
                 "temperature": 0.7,
@@ -44,109 +52,25 @@ def build_config(opts):
         },
     }
 
-    # --- LLM Provider ---
-    provider = opts.get("llm_provider", "zhipu")
-    api_key = opts.get("llm_api_key", "")
-    api_base = opts.get("llm_api_base", "")
-
-    if api_key:
-        provider_config = {"apiKey": api_key}
-        if api_base:
-            provider_config["apiBase"] = api_base
-        config["providers"][provider] = provider_config
-    else:
-        print("[WARN] No LLM API key configured. Bot will not work until key is set.")
-
-    # --- Telegram ---
-    if opts.get("telegram_enabled", False):
-        token = opts.get("telegram_token", "")
-        allow_from = opts.get("telegram_allow_from", [])
-        if token:
-            config["channels"]["telegram"] = {
-                "enabled": True,
-                "token": token,
-                "allowFrom": allow_from,
-            }
-        else:
-            print("[WARN] Telegram enabled but no token provided.")
-
-    # --- Web Search ---
-    search_key = opts.get("web_search_api_key", "")
-    if search_key:
-        config["tools"]["web"] = {
-            "search": {
-                "apiKey": search_key,
-                "maxResults": 5,
-            }
-        }
-
-    # --- MCP (Home Assistant) ---
-    if opts.get("ha_mcp_enabled", False):
-        ha_url = opts.get("ha_mcp_url", "")
-        ha_token = opts.get("ha_mcp_token", "")
-        if ha_url:
-            mcp_config = {"url": ha_url}
-            if ha_token:
-                mcp_config["headers"] = {
-                    "Authorization": f"Bearer {ha_token}"
-                }
-            config["tools"]["mcpServers"] = {
-                "homeassistant": mcp_config
-            }
-        else:
-            print("[WARN] HA MCP enabled but no URL provided.")
-
-    return config
-
-
-def merge_config(existing, generated):
-    """
-    Merge generated config into existing, preserving user customizations.
-    Only updates keys that come from HA options; leaves extra keys untouched.
-    """
-    for key, value in generated.items():
-        if key in existing and isinstance(existing[key], dict) and isinstance(value, dict):
-            merge_config(existing[key], value)
-        else:
-            existing[key] = value
-    return existing
-
 
 def main():
     opts = load_options()
 
-    # Set HOME for nanobot
     os.environ["HOME"] = "/data"
-
-    # Ensure directories exist
     os.makedirs(NANOBOT_HOME, exist_ok=True)
     os.makedirs(os.path.join(NANOBOT_HOME, "workspace"), exist_ok=True)
     os.makedirs(os.path.join(NANOBOT_HOME, "skills"), exist_ok=True)
 
-    generated = build_config(opts)
-
-    # If config already exists, merge (preserve user edits via terminal)
     if os.path.exists(CONFIG_FILE):
-        print("[INFO] Existing config found. Merging HA options...")
-        with open(CONFIG_FILE, "r") as f:
-            try:
-                existing = json.load(f)
-            except json.JSONDecodeError:
-                print("[WARN] Existing config is invalid JSON. Overwriting.")
-                existing = {}
-        config = merge_config(existing, generated)
+        print(f"[INFO] Config already exists at {CONFIG_FILE} — not overwriting.")
+        print("[INFO] Edit via File Editor at /config/nanobot/config.json")
     else:
-        print("[INFO] No existing config. Creating new config from HA options.")
-        config = generated
-
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(config, f, indent=2, ensure_ascii=False)
-
-    print(f"[INFO] Config written to {CONFIG_FILE}")
-    print(f"[INFO] Provider: {opts.get('llm_provider', 'zhipu')}")
-    print(f"[INFO] Model: {opts.get('llm_model', 'zai/glm-4-flash')}")
-    print(f"[INFO] Telegram: {'enabled' if opts.get('telegram_enabled') else 'disabled'}")
-    print(f"[INFO] HA MCP: {'enabled' if opts.get('ha_mcp_enabled') else 'disabled'}")
+        print("[INFO] No config found. Creating default template...")
+        config = create_default_config()
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+        print(f"[INFO] Default config written to {CONFIG_FILE}")
+        print("[INFO] Edit /config/nanobot/config.json to set your API key and provider.")
 
 
 if __name__ == "__main__":
