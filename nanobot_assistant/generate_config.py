@@ -121,11 +121,18 @@ def apply_telegram_options(config, telegram):
     allow_from = [x.strip() for x in allow_from if x.strip()]
 
     if enabled and token:
-        config.setdefault("channels", {})["telegram"] = {
+        existing_tg = config.get("channels", {}).get("telegram", {})
+        tg_config = {
             "enabled": True,
             "token": token,
-            "allowFrom": allow_from,
         }
+        # Preserve existing allowFrom if HA UI list is empty
+        if allow_from:
+            tg_config["allowFrom"] = allow_from
+        elif existing_tg.get("allowFrom"):
+            tg_config["allowFrom"] = existing_tg["allowFrom"]
+
+        config.setdefault("channels", {})["telegram"] = tg_config
     else:
         # Remove telegram if disabled or no token
         config.setdefault("channels", {}).pop("telegram", None)
@@ -163,15 +170,41 @@ def apply_mcp_options(config, mcp):
         servers.pop("homeassistant", None)
 
 
+def load_system_prompt(ha_prompt: str) -> str:
+    """Load system prompt: HA settings field > file > empty.
+
+    Priority:
+      1. HA settings field (if non-empty)
+      2. /config/nanobot/system_prompt.txt (editable via File Editor)
+    """
+    if ha_prompt:
+        return ha_prompt
+
+    prompt_file = os.path.join(NANOBOT_HOME, "system_prompt.txt")
+    if os.path.exists(prompt_file):
+        try:
+            with open(prompt_file, "r") as f:
+                content = f.read().strip()
+            if content:
+                print(f"[INFO] System prompt loaded from {prompt_file}")
+                return content
+        except OSError:
+            pass
+    return ""
+
+
 def apply_advanced_options(config, advanced):
     """Apply Advanced section from HA options (timezone handled by run.sh)."""
-    system_prompt = advanced.get("system_prompt", "").strip()
+    ha_prompt = advanced.get("system_prompt", "").strip()
     max_tokens = advanced.get("max_tokens")
     temperature = advanced.get("temperature")
 
     defaults = config.setdefault("agents", {}).setdefault("defaults", {})
+
+    system_prompt = load_system_prompt(ha_prompt)
     if system_prompt:
         defaults["systemPrompt"] = system_prompt
+
     if max_tokens is not None:
         defaults["maxTokens"] = int(max_tokens)
     if temperature is not None:

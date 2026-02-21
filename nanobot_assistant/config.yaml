@@ -1,6 +1,6 @@
 name: "Nanobot Assistant"
 description: "Ultra-lightweight AI personal assistant for Home Assistant powered by Zhipu GLM / OpenRouter / Anthropic and other LLM providers. MCP support, Telegram integration, scheduled tasks."
-version: "0.1.12"
+version: "0.1.13"
 slug: "nanobot_assistant"
 url: "https://github.com/HKUDS/nanobot"
 arch:
@@ -13,6 +13,7 @@ boot: auto
 host_network: true
 map:
   - addon_config:rw
+  - homeassistant_config:rw
   - ssl:ro
 ports:
   18790/tcp: 18790
@@ -36,6 +37,7 @@ options:
     token: ""
   advanced:
     system_prompt: ""
+    ha_config_access: false
     timezone: "Europe/Kiev"
     max_tokens: 8192
     temperature: 0.7
@@ -56,6 +58,7 @@ schema:
     token: "password?"
   advanced:
     system_prompt: "str?"
+    ha_config_access: "bool"
     timezone: "str?"
     max_tokens: "int?"
     temperature: "float?"

@@ -56,6 +56,23 @@ echo "[INFO] Channels: $(jq -r '.channels | keys | join(", ") // "none"' "${CONF
 # Symlink for nanobot CLI which reads from ~/.nanobot/config.json
 ln -sf "${CONFIG_FILE}" "/data/.nanobot/config.json" 2>/dev/null || true
 
+# --- HA config access (optional, enabled in Advanced settings) ---
+HA_CONFIG_ACCESS=$(jq -r '.advanced.ha_config_access // false' /data/options.json 2>/dev/null)
+if [ "${HA_CONFIG_ACCESS}" = "true" ] && [ -d "/homeassistant" ]; then
+    ln -sfn /homeassistant "${NANOBOT_HOME}/workspace/ha-config"
+    echo "[INFO] HA config access ENABLED: workspace/ha-config -> /homeassistant/"
+    # Disable workspace restriction so bot can access HA files
+    jq '.tools.restrictToWorkspace = false' "${CONFIG_FILE}" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "${CONFIG_FILE}"
+    # Export Supervisor API token
+    if [ -n "${SUPERVISOR_TOKEN}" ]; then
+        export SUPERVISOR_TOKEN
+        echo "[INFO] Supervisor API token available"
+    fi
+else
+    # Remove stale symlink if feature was disabled
+    rm -f "${NANOBOT_HOME}/workspace/ha-config" 2>/dev/null
+fi
+
 # --- Timezone (from HA options) ---
 TIMEZONE=$(jq -r '.advanced.timezone // "Europe/Kiev"' /data/options.json 2>/dev/null)
 if [ -f "/usr/share/zoneinfo/${TIMEZONE}" ]; then
@@ -75,7 +92,7 @@ fi
 
 # --- Banner ---
 echo "=============================================="
-echo " Nanobot Assistant v0.1.12"
+echo " Nanobot Assistant v0.1.13"
 echo " Config:   ${NANOBOT_HOME}/"
 echo " Web UI:   http://0.0.0.0:8080  (HA Ingress)"
 echo " Gateway:  http://0.0.0.0:18790"
