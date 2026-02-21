@@ -1,6 +1,6 @@
 name: "Nanobot Assistant"
 description: "Ultra-lightweight AI personal assistant for Home Assistant powered by Zhipu GLM / OpenRouter / Anthropic and other LLM providers. MCP support, Telegram integration, scheduled tasks."
-version: "0.1.5"
+version: "0.1.6"
 slug: "nanobot_assistant"
 url: "https://github.com/HKUDS/nanobot"
 arch:
@@ -11,7 +11,7 @@ init: false
 startup: application
 boot: auto
 map:
-  - config:rw
+  - addon_config:rw
   - ssl:ro
 ports:
   18790/tcp: 18790

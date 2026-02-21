@@ -28,20 +28,18 @@ trap cleanup SIGTERM SIGINT
 # --- Directories & symlinks ---
 mkdir -p "${NANOBOT_HOME}" "${NANOBOT_HOME}/workspace" "${NANOBOT_HOME}/skills" "/data/.nanobot"
 
-# --- Expose user-editable files in /config/nanobot/ ---
-HA_CONFIG_DIR="/config/nanobot"
-mkdir -p "${HA_CONFIG_DIR}"
-ln -sfn "${NANOBOT_HOME}/skills"    "${HA_CONFIG_DIR}/skills"
-ln -sfn "${NANOBOT_HOME}/workspace" "${HA_CONFIG_DIR}/workspace"
-ln -sfn "${NANOBOT_HOME}/config.json" "${HA_CONFIG_DIR}/config.json" 2>/dev/null || true
-ln -sfn "${NANOBOT_HOME}/gateway.log" "${HA_CONFIG_DIR}/gateway.log" 2>/dev/null || true
-echo "[INFO] User files exposed at /config/nanobot/"
+# --- Expose user-editable files in /config/ (addon_config) ---
+ADDON_CONFIG_DIR="/config"
+ln -sfn "${NANOBOT_HOME}/skills"    "${ADDON_CONFIG_DIR}/skills"
+ln -sfn "${NANOBOT_HOME}/workspace" "${ADDON_CONFIG_DIR}/workspace"
+ln -sfn "${NANOBOT_HOME}/gateway.log" "${ADDON_CONFIG_DIR}/gateway.log" 2>/dev/null || true
+echo "[INFO] User files exposed at addon config folder"
 
 # --- Generate default config (first run only) ---
 echo "[INFO] Checking config..."
 ${PYTHON} /generate_config.py
 ln -sf "${CONFIG_FILE}" "/data/.nanobot/config.json" 2>/dev/null || true
-ln -sfn "${CONFIG_FILE}" "${HA_CONFIG_DIR}/config.json" 2>/dev/null || true
+ln -sfn "${CONFIG_FILE}" "${ADDON_CONFIG_DIR}/config.json" 2>/dev/null || true
 
 # --- Timezone (from config.json or default) ---
 TIMEZONE=$(jq -r '.timezone // "Europe/Kiev"' "${CONFIG_FILE}" 2>/dev/null)
@@ -67,7 +65,7 @@ fi
 
 # --- Banner ---
 echo "=============================================="
-echo " 🐈 Nanobot Assistant v0.1.5"
+echo " 🐈 Nanobot Assistant v0.1.6"
 echo " Web UI:   http://0.0.0.0:8080  (HA Ingress)"
 echo " Gateway:  http://0.0.0.0:18790"
 echo " Provider: $(jq -r '.providers | keys[0] // "none"' "${CONFIG_FILE}" 2>/dev/null)"
