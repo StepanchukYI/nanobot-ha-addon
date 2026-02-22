@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-"""Minimal web UI for Nanobot HA addon: config editor + log viewer."""
+"""Minimal web UI for Nanobot HA addon: config editor + log viewer.
+
+Works both via direct port access and through HA Ingress proxy.
+"""
 
 import json
 import os
-import subprocess
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
-CONFIG_FILE = "/data/nanobot/config.json"
+NANOBOT_HOME = os.environ.get("NANOBOT_HOME", "/config/nanobot")
+CONFIG_FILE = os.path.join(NANOBOT_HOME, "config.json")
+LOG_FILE = os.path.join(NANOBOT_HOME, "gateway.log")
 LOG_LINES = 500
 
 HTML = """<!DOCTYPE html>
@@ -77,6 +81,15 @@ HTML = """<!DOCTYPE html>
 </div>
 
 <script>
+// Detect base path for HA Ingress compatibility
+// Ingress URLs: /api/hassio_ingress/<token>/
+// Direct URLs: /
+const basePath = window.location.pathname.replace(/\\/+$/, '');
+
+function apiUrl(path) {
+  return basePath + path;
+}
+
 function showTab(name) {
   document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', t.textContent.toLowerCase().includes(name)));
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -93,7 +106,7 @@ function showMsg(text, ok) {
 
 async function loadConfig() {
   try {
-    const r = await fetch('/api/config');
+    const r = await fetch(apiUrl('/api/config'));
     const data = await r.json();
     document.getElementById('configEditor').value = JSON.stringify(data, null, 2);
     document.getElementById('configStatus').textContent = 'Loaded';
@@ -111,7 +124,7 @@ async function saveConfig() {
     return;
   }
   try {
-    const r = await fetch('/api/config', { method: 'POST', headers: {'Content-Type':'application/json'}, body: text });
+    const r = await fetch(apiUrl('/api/config'), { method: 'POST', headers: {'Content-Type':'application/json'}, body: text });
     if (r.ok) {
       showMsg('Config saved. Restart addon to apply changes.', true);
       document.getElementById('configStatus').textContent = 'Saved';
@@ -125,7 +138,7 @@ async function saveConfig() {
 
 async function loadLogs() {
   try {
-    const r = await fetch('/api/logs');
+    const r = await fetch(apiUrl('/api/logs'));
     const data = await r.json();
     const el = document.getElementById('logsView');
     el.textContent = (data.logs || []).join('\\n');
@@ -163,12 +176,28 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.end_headers()
 
+    def _strip_ingress(self, path):
+        """Strip HA Ingress prefix from path.
+
+        Ingress paths: /api/hassio_ingress/<token>/api/config
+        Direct paths:  /api/config
+        """
+        # Find the last occurrence of /api/ that is our API
+        for prefix in ("/api/config", "/api/logs", "/api/health"):
+            if path.endswith(prefix):
+                return prefix
+        if path.endswith("/") or path.endswith("/index.html"):
+            return "/"
+        return path
+
     def do_GET(self):
-        if self.path == "/" or self.path == "/index.html":
+        route = self._strip_ingress(self.path)
+
+        if route == "/" or route == "/index.html":
             self._headers(200, "text/html")
             self.wfile.write(HTML.encode())
 
-        elif self.path == "/api/config":
+        elif route == "/api/config":
             try:
                 with open(CONFIG_FILE) as f:
                     data = f.read()
@@ -178,11 +207,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._headers(500)
                 self.wfile.write(json.dumps({"error": str(e)}).encode())
 
-        elif self.path == "/api/logs":
+        elif route == "/api/logs":
             try:
-                log_file = "/data/nanobot/gateway.log"
-                if os.path.exists(log_file):
-                    with open(log_file) as f:
+                if os.path.exists(LOG_FILE):
+                    with open(LOG_FILE) as f:
                         lines = f.readlines()[-LOG_LINES:]
                     lines = [l.rstrip() for l in lines]
                 else:
@@ -193,7 +221,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._headers()
                 self.wfile.write(json.dumps({"logs": [f"Error: {e}"]}).encode())
 
-        elif self.path == "/api/health":
+        elif route == "/api/health":
             self._headers()
             self.wfile.write(json.dumps({"ok": True}).encode())
 
@@ -202,7 +230,9 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(b'{"error":"not found"}')
 
     def do_POST(self):
-        if self.path == "/api/config":
+        route = self._strip_ingress(self.path)
+
+        if route == "/api/config":
             try:
                 length = int(self.headers.get("Content-Length", 0))
                 body = self.rfile.read(length)
@@ -223,7 +253,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    port = int(os.environ.get("WEB_PORT", 8099))
+    port = int(os.environ.get("WEB_PORT", 8080))
     server = HTTPServer(("0.0.0.0", port), Handler)
     print(f"[INFO] Web UI running on port {port}")
     server.serve_forever()
