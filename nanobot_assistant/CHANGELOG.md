@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.14 (2026-02-22)
+
+### Added
+
+- HA Ingress proxy support in Web UI — works both via direct port and through HA sidebar
+- `mcp-proxy` as stdio-to-Streamable-HTTP bridge for reliable HA MCP connection
+- `system_prompt.txt` file support (used when HA settings field is empty)
+- `ha_config_access` toggle in Advanced settings — bot can read/edit HA config files
+- Preserve Telegram `allowFrom` when HA UI list is empty
+
+### Fixed
+
+- Web UI port default from 8099 to 8080 (matching `ingress_port`)
+- Web UI config/log file paths to use `NANOBOT_HOME` env (`/config/nanobot/`)
+- Healthcheck now checks Web UI (port 8080, instant) instead of gateway (port 18790, slow startup)
+- Added 60s `start-period` to prevent premature container restarts
+
 ## 0.1.7 (2026-02-21)
 
 ### Added
