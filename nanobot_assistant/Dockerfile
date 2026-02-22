@@ -28,8 +28,8 @@ COPY generate_config.py /
 COPY webui.py /
 RUN chmod a+x /run.sh
 
-# Healthcheck
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    CMD curl -sf http://localhost:18790/health || exit 1
+# Healthcheck: check Web UI (always running), not gateway (slow to start)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -sf http://localhost:8080/ || exit 1
 
 CMD [ "/run.sh" ]
