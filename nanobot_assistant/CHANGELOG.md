@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.16 (2026-02-22)
+
+### Added
+
+- MCP Servers tab in Web UI — add/remove custom MCP servers without editing JSON
+- Renamed addon to "Nanobot — AI Assistant for Raspberry Pi"
+
+### Fixed
+
+- EWS MCP server now installs from GitHub (not available on PyPI)
+
 ## 0.1.15 (2026-02-22)
 
 ### Added

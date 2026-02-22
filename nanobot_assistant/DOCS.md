@@ -1,6 +1,6 @@
-# Nanobot Assistant — Home Assistant Add-on
+# Nanobot — AI Assistant for Raspberry Pi
 
-Ultra-lightweight AI assistant for smart home control. Works with any OpenAI-compatible LLM provider. ~4000 lines of code, ~100 MB RAM.
+Ultra-lightweight AI assistant (~100 MB RAM) built for Raspberry Pi and low-power devices. Works with any OpenAI-compatible LLM provider.
 
 ## Getting Started
 
@@ -125,8 +125,16 @@ on restart — HA settings override only the fields you change in the UI.
 
 ## MCP Servers
 
-Nanobot supports connecting any MCP servers. Add them manually to
-`tools.mcpServers` in `/config/nanobot/config.json`.
+The Web UI has a dedicated **MCP Servers** tab where you can manage all MCP connections:
+
+- **Built-in servers** (Home Assistant, Exchange) are configured via HA Settings and shown as read-only
+- **Custom servers** can be added/removed directly from the Web UI
+- Click **+ Add Server** to add a new MCP server: provide a name, command path, optional arguments and environment variables
+- Changes require an addon restart to take effect
+
+Custom servers added via the Web UI are preserved across restarts — `generate_config.py` only touches built-in server entries.
+
+You can also add servers manually to `tools.mcpServers` in `/config/nanobot/config.json`.
 
 ## Scheduled Tasks (Cron)
 

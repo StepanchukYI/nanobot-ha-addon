@@ -42,17 +42,39 @@ HTML = """<!DOCTYPE html>
   .msg { padding: 8px 12px; border-radius: 4px; margin-bottom: 12px; font-size: 13px; }
   .msg-ok { background: #e8f5e9; color: #2e7d32; }
   .msg-err { background: #ffebee; color: #c62828; }
+  .mcp-list { display: flex; flex-direction: column; gap: 10px; }
+  .mcp-card { border: 1px solid #ddd; border-radius: 4px; padding: 12px; background: #fafafa; }
+  .mcp-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .mcp-card-name { font-weight: 500; font-size: 14px; }
+  .mcp-badge { font-size: 11px; padding: 2px 8px; border-radius: 3px; background: #e0e0e0; color: #666; }
+  .mcp-badge-builtin { background: #e3f2fd; color: #1565c0; }
+  .mcp-card-detail { font-size: 12px; color: #666; margin: 2px 0; }
+  .mcp-card-detail code { background: #f0f0f0; padding: 1px 5px; border-radius: 2px; font-size: 12px; }
+  .mcp-card-actions { margin-top: 8px; display: flex; justify-content: flex-end; }
+  .btn-danger { background: #ef5350; color: white; }
+  .btn-danger:hover { background: #d32f2f; }
+  .btn-sm { padding: 4px 12px; font-size: 12px; }
+  .modal-bg { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  .modal-box { background: white; padding: 24px; border-radius: 6px; width: 90%; max-width: 460px; }
+  .modal-box h3 { margin: 0 0 16px; font-size: 16px; }
+  .fg { margin-bottom: 12px; }
+  .fg label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+  .fg input, .fg textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 13px; box-sizing: border-box; }
+  .fg textarea { resize: vertical; }
+  .fg .hint { font-size: 11px; color: #999; margin-top: 2px; }
+  .section-title { font-size: 13px; font-weight: 500; color: #666; margin: 16px 0 8px; text-transform: uppercase; letter-spacing: 0.5px; }
 </style>
 </head>
 <body>
 
 <div class="header">
   <span style="font-size:24px">🐈</span>
-  <h1>Nanobot Assistant</h1>
+  <h1>Nanobot</h1>
 </div>
 
 <div class="tabs">
   <div class="tab active" onclick="showTab('config')">Configuration</div>
+  <div class="tab" onclick="showTab('mcp')">MCP Servers</div>
   <div class="tab" onclick="showTab('logs')">Log</div>
 </div>
 
@@ -67,6 +89,20 @@ HTML = """<!DOCTYPE html>
   </div>
   <textarea id="configEditor" spellcheck="false"></textarea>
 </div>
+
+<div class="panel" id="panel-mcp">
+  <div class="toolbar">
+    <button class="btn btn-primary" onclick="openAddModal()">+ Add Server</button>
+    <div class="spacer"></div>
+    <span class="status" id="mcpStatus"></span>
+  </div>
+  <div class="section-title">Built-in</div>
+  <div class="mcp-list" id="builtinList"></div>
+  <div class="section-title">Custom</div>
+  <div class="mcp-list" id="customList"></div>
+</div>
+
+<div id="mcpModal" style="display:none"></div>
 
 <div class="panel" id="panel-logs">
   <div class="toolbar">
@@ -96,6 +132,7 @@ function showTab(name) {
   document.getElementById('panel-' + name).classList.add('active');
   if (name === 'logs') loadLogs();
   if (name === 'config') loadConfig();
+  if (name === 'mcp') loadMcpServers();
 }
 
 function showMsg(text, ok) {
@@ -159,6 +196,141 @@ document.getElementById('configEditor').addEventListener('keydown', function(e) 
     this.selectionStart = this.selectionEnd = s + 2;
   }
 });
+
+const BUILTIN_SERVERS = ['homeassistant', 'exchange'];
+
+async function loadMcpServers() {
+  try {
+    const r = await fetch(apiUrl('/api/config'));
+    const config = await r.json();
+    const servers = (config.tools && config.tools.mcpServers) || {};
+    const builtin = [];
+    const custom = [];
+    for (const [name, srv] of Object.entries(servers)) {
+      const entry = {name, command: srv.command || '', args: srv.args || [], env: srv.env || {}};
+      if (BUILTIN_SERVERS.includes(name)) builtin.push(entry);
+      else custom.push(entry);
+    }
+    renderServers('builtinList', builtin, false);
+    renderServers('customList', custom, true);
+    document.getElementById('mcpStatus').textContent = Object.keys(servers).length + ' servers';
+  } catch(e) {
+    showMsg('Failed to load MCP servers: ' + e.message, false);
+  }
+}
+
+function renderServers(containerId, servers, canDelete) {
+  const el = document.getElementById(containerId);
+  if (!servers.length) {
+    el.innerHTML = '<div style="color:#999;font-size:13px;padding:8px 0">No servers configured</div>';
+    return;
+  }
+  el.innerHTML = servers.map(s => {
+    const argsStr = s.args.length ? s.args.join(' ') : '';
+    const envKeys = Object.keys(s.env);
+    const envStr = envKeys.map(k => {
+      const v = s.env[k];
+      const masked = (k.toLowerCase().includes('password') || k.toLowerCase().includes('token') || k.toLowerCase().includes('secret') || k.toLowerCase().includes('key'))
+        ? '***' : v;
+      return k + '=' + masked;
+    }).join(', ');
+    return '<div class="mcp-card">' +
+      '<div class="mcp-card-head">' +
+        '<span class="mcp-card-name">' + esc(s.name) + '</span>' +
+        (canDelete ? '<span class="mcp-badge">custom</span>' : '<span class="mcp-badge mcp-badge-builtin">built-in</span>') +
+      '</div>' +
+      '<div class="mcp-card-detail"><strong>Command:</strong> <code>' + esc(s.command) + '</code></div>' +
+      (argsStr ? '<div class="mcp-card-detail"><strong>Args:</strong> <code>' + esc(argsStr) + '</code></div>' : '') +
+      (envKeys.length ? '<div class="mcp-card-detail"><strong>Env:</strong> <code>' + esc(envStr) + '</code></div>' : '') +
+      (canDelete ? '<div class="mcp-card-actions"><button class="btn btn-danger btn-sm" onclick="deleteMcpServer(\\'' + esc(s.name) + '\\')">Delete</button></div>' : '') +
+    '</div>';
+  }).join('');
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function openAddModal() {
+  document.getElementById('mcpModal').style.display = '';
+  document.getElementById('mcpModal').innerHTML =
+    '<div class="modal-bg" onclick="if(event.target===this)closeModal()">' +
+    '<div class="modal-box">' +
+      '<h3>Add MCP Server</h3>' +
+      '<div class="fg"><label>Name</label><input id="m-name" placeholder="my-server"></div>' +
+      '<div class="fg"><label>Command</label><input id="m-cmd" placeholder="/usr/bin/mcp-server"><div class="hint">Full path to the MCP server binary</div></div>' +
+      '<div class="fg"><label>Arguments</label><input id="m-args" placeholder="--flag1 --flag2 value"><div class="hint">Space-separated arguments</div></div>' +
+      '<div class="fg"><label>Environment Variables</label><textarea id="m-env" rows="4" placeholder="KEY=value\\nANOTHER_KEY=value"></textarea><div class="hint">One per line: KEY=value</div></div>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">' +
+        '<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>' +
+        '<button class="btn btn-primary" onclick="saveMcpServer()">Add</button>' +
+      '</div>' +
+    '</div></div>';
+}
+
+function closeModal() {
+  document.getElementById('mcpModal').style.display = 'none';
+  document.getElementById('mcpModal').innerHTML = '';
+}
+
+async function saveMcpServer() {
+  const name = document.getElementById('m-name').value.trim();
+  const cmd = document.getElementById('m-cmd').value.trim();
+  const argsStr = document.getElementById('m-args').value.trim();
+  const envStr = document.getElementById('m-env').value.trim();
+
+  if (!name || !cmd) { showMsg('Name and Command are required', false); return; }
+  if (BUILTIN_SERVERS.includes(name)) { showMsg('Cannot use reserved name: ' + name, false); return; }
+  if (!/^[a-zA-Z0-9_-]+$/.test(name)) { showMsg('Name: only letters, numbers, hyphens, underscores', false); return; }
+
+  const args = argsStr ? argsStr.split(/\\s+/) : [];
+  const env = {};
+  if (envStr) {
+    for (const line of envStr.split('\\n')) {
+      const eq = line.indexOf('=');
+      if (eq > 0) env[line.substring(0, eq).trim()] = line.substring(eq + 1).trim();
+    }
+  }
+
+  try {
+    const r = await fetch(apiUrl('/api/config'));
+    const config = await r.json();
+    if (!config.tools) config.tools = {};
+    if (!config.tools.mcpServers) config.tools.mcpServers = {};
+    config.tools.mcpServers[name] = {command: cmd, args: args, env: env};
+
+    const r2 = await fetch(apiUrl('/api/config'), {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(config, null, 2)
+    });
+    if (r2.ok) {
+      showMsg('Server "' + name + '" added. Restart addon to apply.', true);
+      closeModal();
+      loadMcpServers();
+    } else {
+      showMsg('Failed to save: ' + r2.statusText, false);
+    }
+  } catch(e) { showMsg('Error: ' + e.message, false); }
+}
+
+async function deleteMcpServer(name) {
+  if (!confirm('Delete MCP server "' + name + '"?')) return;
+  try {
+    const r = await fetch(apiUrl('/api/config'));
+    const config = await r.json();
+    if (config.tools && config.tools.mcpServers) {
+      delete config.tools.mcpServers[name];
+    }
+    const r2 = await fetch(apiUrl('/api/config'), {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(config, null, 2)
+    });
+    if (r2.ok) {
+      showMsg('Server "' + name + '" deleted. Restart addon to apply.', true);
+      loadMcpServers();
+    } else {
+      showMsg('Delete failed: ' + r2.statusText, false);
+    }
+  } catch(e) { showMsg('Error: ' + e.message, false); }
+}
 
 loadConfig();
 setInterval(() => { if (document.getElementById('panel-logs').classList.contains('active')) loadLogs(); }, 5000);

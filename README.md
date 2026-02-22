@@ -1,10 +1,10 @@
-# Nanobot Assistant — Home Assistant Add-on
+# Nanobot — AI Assistant for Raspberry Pi
 
 [![HA Addon](https://img.shields.io/badge/Home%20Assistant-Add--on-blue)](https://www.home-assistant.io/)
 [![Nanobot](https://img.shields.io/badge/nanobot-v0.1.4-green)](https://github.com/HKUDS/nanobot)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Ultra-lightweight AI assistant for Home Assistant, powered by [nanobot](https://github.com/HKUDS/nanobot) (~4,000 lines of code, ~100 MB RAM).
+Ultra-lightweight AI assistant (~100 MB RAM) built for Raspberry Pi and low-power devices, powered by [nanobot](https://github.com/HKUDS/nanobot).
 
 Works with **any OpenAI-compatible LLM provider** — OpenRouter, Anthropic, OpenAI, DeepSeek, Gemini, Zhipu, Ollama, and more.
 
