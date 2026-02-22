@@ -48,6 +48,26 @@ Requires the **Model Context Protocol Server** integration installed in HA:
 
 The add-on uses `mcp-proxy` as a stdio-to-Streamable-HTTP bridge for reliable MCP connection.
 
+### Exchange MCP (Email & Calendar)
+
+| Field | Description |
+|-------|-------------|
+| `enabled` | Enable Exchange MCP integration |
+| `server_url` | Exchange server hostname (e.g. `mail.company.com`) |
+| `email` | Your Exchange email address |
+| `auth_type` | Authentication type: `ntlm` (on-premises), `basic`, or `oauth2` (Office 365) |
+| `username` | Exchange username (usually same as email) |
+| `password` | Exchange password |
+
+When enabled, the bot gets access to:
+- **Email** — read, send, search, reply, forward
+- **Calendar** — view events, create appointments, check availability
+- **Contacts** — search, create, update
+- **Tasks** — create, update, complete
+
+Uses [ews-mcp-server](https://github.com/azizmazrou/ews-mcp) as stdio MCP server.
+Timezone is inherited from the Advanced section.
+
 ### Advanced
 
 | Field | Description |
@@ -137,6 +157,12 @@ nanobot cron add --name "morning" --message "Temperature summary" --cron "0 8 * 
 - Make sure the MCP Server integration is installed in HA
 - Check your Long-Lived Access Token
 - The add-on uses `mcp-proxy` for reliable connection; check logs for HTTP status codes
+
+**Exchange not connecting:**
+- Verify your Exchange server URL (try `https://your-server/EWS/Exchange.asmx` in a browser)
+- For on-premises Exchange use `ntlm` auth type
+- Check that your credentials are correct
+- Ensure your Exchange server is reachable from the HA host
 
 ## Data
 

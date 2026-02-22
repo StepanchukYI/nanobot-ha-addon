@@ -170,6 +170,39 @@ def apply_mcp_options(config, mcp):
         servers.pop("homeassistant", None)
 
 
+def apply_exchange_mcp_options(config, exchange, timezone="UTC"):
+    """Apply Exchange (EWS) MCP section from HA options.
+
+    Uses ews-mcp-server as a stdio MCP server for Exchange email,
+    calendar, contacts and tasks access.
+    """
+    enabled = exchange.get("enabled", False)
+    server_url = exchange.get("server_url", "").strip()
+    email = exchange.get("email", "").strip()
+    auth_type = exchange.get("auth_type", "ntlm").strip()
+    username = exchange.get("username", "").strip()
+    password = exchange.get("password", "").strip()
+
+    tools = config.setdefault("tools", {})
+    servers = tools.setdefault("mcpServers", {})
+
+    if enabled and server_url and email and username and password:
+        servers["exchange"] = {
+            "command": "/opt/nanobot-venv/bin/ews-mcp-server",
+            "args": [],
+            "env": {
+                "EWS_SERVER_URL": server_url,
+                "EWS_EMAIL": email,
+                "EWS_AUTH_TYPE": auth_type,
+                "EWS_USERNAME": username,
+                "EWS_PASSWORD": password,
+                "TIMEZONE": timezone,
+            },
+        }
+    else:
+        servers.pop("exchange", None)
+
+
 def load_system_prompt(ha_prompt: str) -> str:
     """Load system prompt: HA settings field > file > empty.
 
@@ -234,6 +267,9 @@ def main():
         apply_telegram_options(config, opts["telegram"])
     if opts.get("homeassistant_mcp"):
         apply_mcp_options(config, opts["homeassistant_mcp"])
+    if opts.get("exchange_mcp"):
+        timezone = opts.get("advanced", {}).get("timezone", "UTC")
+        apply_exchange_mcp_options(config, opts["exchange_mcp"], timezone)
     if opts.get("advanced"):
         apply_advanced_options(config, opts["advanced"])
 

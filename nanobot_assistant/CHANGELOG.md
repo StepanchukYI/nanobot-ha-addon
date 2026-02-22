@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.15 (2026-02-22)
+
+### Added
+
+- Exchange MCP integration (email, calendar, contacts, tasks) via `ews-mcp-server`
+- `.gitignore` to prevent accidental commits of secrets
+
 ## 0.1.14 (2026-02-22)
 
 ### Added
