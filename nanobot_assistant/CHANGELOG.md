@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.17 (2026-02-22)
+
+### Fixed
+
+- EWS MCP server: clone from source + wrapper script (pip entry point broken, `No module named 'src'`)
+
 ## 0.1.16 (2026-02-22)
 
 ### Added

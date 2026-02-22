@@ -15,9 +15,17 @@ RUN apk add --no-cache \
 # Create virtual environment for clean dependency management
 RUN python3 -m venv /opt/nanobot-venv
 
-# Install nanobot
+# Install nanobot + mcp-proxy
 RUN /opt/nanobot-venv/bin/pip install --no-cache-dir --upgrade pip && \
-    /opt/nanobot-venv/bin/pip install --no-cache-dir "nanobot-ai>=0.1.4" "mcp-proxy>=0.3.0" "ews-mcp-server @ git+https://github.com/azizmazrou/ews-mcp.git"
+    /opt/nanobot-venv/bin/pip install --no-cache-dir "nanobot-ai>=0.1.4" "mcp-proxy>=0.3.0"
+
+# Clone EWS MCP server (pip entry point is broken, must run from source)
+RUN git clone --depth 1 https://github.com/azizmazrou/ews-mcp.git /opt/ews-mcp && \
+    /opt/nanobot-venv/bin/pip install --no-cache-dir -r /opt/ews-mcp/requirements.txt
+
+# Create wrapper script (official Dockerfile uses `python -m src.main`)
+RUN printf '#!/bin/sh\ncd /opt/ews-mcp && exec /opt/nanobot-venv/bin/python -m src.main "$@"\n' \
+    > /opt/nanobot-venv/bin/ews-mcp-server && chmod +x /opt/nanobot-venv/bin/ews-mcp-server
 
 # Create persistent directories
 RUN mkdir -p /data/nanobot /data/nanobot/workspace /data/nanobot/skills /data/.nanobot
