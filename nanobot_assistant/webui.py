@@ -220,93 +220,169 @@ async function loadLogs() {
 }
 
 // ── Agents ───────────────────────────────────────────────────────
+// Schema (nanobot fork feat/cron-named-agent-profiles):
+//   agents.defaults  → AgentDefaults: model, visionModel, workspace,
+//                      maxTokens, temperature, maxToolIterations, memoryWindow
+//   agents.profiles  → dict[name, AgentProfile]: systemPrompt (req), model (opt)
+//                      Used by cron jobs via:  nanobot cron add --agent <name>
+// Global system prompt → workspace/IDENTITY.md (bootstrap file, auto-loaded)
 
 async function loadAgents() {
   try {
     const r = await fetch(apiUrl('/api/config'));
-    const config = await r.json();
-    const agents = config.agents || {};
-    const defEntry  = agents.defaults !== undefined ? {defaults: agents.defaults} : {};
-    const custom = Object.fromEntries(Object.entries(agents).filter(([k]) => k !== 'defaults'));
-    renderAgentCards('defaultAgentList', defEntry, false);
-    renderAgentCards('customAgentList', custom, true);
-    document.getElementById('agentsStatus').textContent = Object.keys(agents).length + ' configured';
+    const cfg = await r.json();
+    const agents = cfg.agents || {};
+    const defs = agents.defaults || null;
+    const profiles = agents.profiles || {};
+
+    // Show defaults card
+    const defEl = document.getElementById('defaultAgentList');
+    if (defs) {
+      defEl.innerHTML = renderDefaultsCard(defs);
+    } else {
+      defEl.innerHTML = '<div class="empty-hint">Not configured</div>';
+    }
+
+    // Show profiles
+    renderProfileCards('customAgentList', profiles);
+
+    const total = (defs ? 1 : 0) + Object.keys(profiles).length;
+    document.getElementById('agentsStatus').textContent = total + ' configured';
   } catch(e) { showMsg('Failed to load agents: ' + e.message, false); }
 }
 
-function agentSummaryHtml(a) {
-  let h = '';
-  if (a.model)    h += '<div class="card-detail"><strong>Model:</strong> <code>' + esc(a.model) + '</code></div>';
-  if (a.maxTokens != null) h += '<div class="card-detail"><strong>Max Tokens:</strong> ' + a.maxTokens + '</div>';
-  if (a.temperature != null) h += '<div class="card-detail"><strong>Temperature:</strong> ' + a.temperature + '</div>';
-  if (a.maxToolIterations != null) h += '<div class="card-detail"><strong>Tool Iterations:</strong> ' + a.maxToolIterations + '</div>';
-  if (a.memoryWindow != null) h += '<div class="card-detail"><strong>Memory Window:</strong> ' + a.memoryWindow + '</div>';
-  if (a.workspace) h += '<div class="card-detail"><strong>Workspace:</strong> <code>' + esc(a.workspace) + '</code></div>';
-  if (a.systemPrompt) {
-    const prev = a.systemPrompt.length > 160 ? a.systemPrompt.slice(0, 160) + '…' : a.systemPrompt;
-    h += '<div class="card-detail"><strong>Prompt:</strong> <span class="prompt-preview">' + esc(prev) + '</span></div>';
-  }
-  return h;
+function renderDefaultsCard(d) {
+  let h = '<div class="card">' +
+    '<div class="card-head"><span class="card-name">defaults</span><span class="badge badge-default">defaults</span></div>';
+  if (d.model)    h += '<div class="card-detail"><strong>Model:</strong> <code>' + esc(d.model) + '</code></div>';
+  if (d.visionModel) h += '<div class="card-detail"><strong>Vision Model:</strong> <code>' + esc(d.visionModel) + '</code></div>';
+  if (d.maxTokens != null) h += '<div class="card-detail"><strong>Max Tokens:</strong> ' + d.maxTokens + '</div>';
+  if (d.temperature != null) h += '<div class="card-detail"><strong>Temperature:</strong> ' + d.temperature + '</div>';
+  if (d.maxToolIterations != null) h += '<div class="card-detail"><strong>Tool Iterations:</strong> ' + d.maxToolIterations + '</div>';
+  if (d.memoryWindow != null) h += '<div class="card-detail"><strong>Memory Window:</strong> ' + d.memoryWindow + '</div>';
+  if (d.workspace) h += '<div class="card-detail"><strong>Workspace:</strong> <code>' + esc(d.workspace) + '</code></div>';
+  h += '<div class="card-actions"><button class="btn btn-secondary btn-sm" onclick="openDefaultsModal()">Edit</button></div>';
+  return h + '</div>';
 }
 
-function renderAgentCards(containerId, agents, canDelete) {
+function renderProfileCards(containerId, profiles) {
   const el = document.getElementById(containerId);
-  const entries = Object.entries(agents);
+  const entries = Object.entries(profiles);
   if (!entries.length) {
-    el.innerHTML = '<div class="empty-hint">' + (canDelete ? 'No custom agents defined' : 'Default config not set') + '</div>';
+    el.innerHTML = '<div class="empty-hint">No profiles — used by cron jobs via <code>--agent &lt;name&gt;</code></div>';
     return;
   }
-  el.innerHTML = entries.map(([name, a]) => {
-    const isDefault = name === 'defaults';
-    const badge = isDefault
-      ? '<span class="badge badge-default">default</span>'
-      : '<span class="badge badge-agent">agent</span>';
+  el.innerHTML = entries.map(([name, p]) => {
+    const prev = (p.systemPrompt || '').length > 160
+      ? p.systemPrompt.slice(0, 160) + '…' : (p.systemPrompt || '');
     return '<div class="card">' +
-      '<div class="card-head"><span class="card-name">' + esc(name) + '</span>' + badge + '</div>' +
-      agentSummaryHtml(a) +
+      '<div class="card-head"><span class="card-name">' + esc(name) + '</span><span class="badge badge-agent">profile</span></div>' +
+      (p.model ? '<div class="card-detail"><strong>Model:</strong> <code>' + esc(p.model) + '</code></div>' : '') +
+      (prev ? '<div class="card-detail"><strong>Prompt:</strong> <span class="prompt-preview">' + esc(prev) + '</span></div>' : '') +
       '<div class="card-actions">' +
-        '<button class="btn btn-secondary btn-sm" onclick=\'openAgentModal(' + JSON.stringify(name) + ')\'>Edit</button>' +
-        (canDelete ? '<button class="btn btn-danger btn-sm" onclick=\'deleteAgent(' + JSON.stringify(name) + ')\'>Delete</button>' : '') +
+        '<button class="btn btn-secondary btn-sm" onclick=\'openProfileModal(' + JSON.stringify(name) + ')\'>Edit</button>' +
+        '<button class="btn btn-danger btn-sm" onclick=\'deleteProfile(' + JSON.stringify(name) + ')\'>Delete</button>' +
       '</div></div>';
   }).join('');
 }
 
-async function openAgentModal(editName) {
-  let agent = {};
+// ── Edit defaults modal ──
+
+async function openDefaultsModal() {
+  let defs = {};
+  try {
+    const r = await fetch(apiUrl('/api/config'));
+    const cfg = await r.json();
+    defs = (cfg.agents || {}).defaults || {};
+  } catch(e) { showMsg('Failed to load: ' + e.message, false); return; }
+
+  const ct = document.getElementById('agentModalCt');
+  ct.style.display = '';
+  ct.innerHTML =
+    '<div class="modal-bg" onclick="if(event.target===this)closeAgentModal()">' +
+    '<div class="modal-box">' +
+      '<h3>Edit Defaults</h3>' +
+      '<div class="fg" style="background:#e8f5e9;padding:8px 10px;border-radius:4px;margin-bottom:12px;font-size:12px;color:#2e7d32">Global settings inherited by all agents and cron jobs. System prompt goes to <code>workspace/IDENTITY.md</code>.</div>' +
+      '<div class="fg"><label>Model</label><input id="ag-model" value="' + esc(defs.model || '') + '" placeholder="zai/glm-4-flash"><div class="hint">Default model for all agents</div></div>' +
+      '<div class="fg"><label>Vision Model</label><input id="ag-vmodel" value="' + esc(defs.visionModel || '') + '" placeholder="google/gemini-2.0-flash-001"><div class="hint">Used when images are attached (optional)</div></div>' +
+      '<div class="two-col">' +
+        '<div class="fg"><label>Max Tokens</label><input id="ag-maxtokens" type="number" min="1" value="' + (defs.maxTokens != null ? defs.maxTokens : '') + '" placeholder="8192"></div>' +
+        '<div class="fg"><label>Temperature</label><input id="ag-temp" type="number" step="0.1" min="0" max="2" value="' + (defs.temperature != null ? defs.temperature : '') + '" placeholder="0.7"></div>' +
+      '</div>' +
+      '<div class="two-col">' +
+        '<div class="fg"><label>Tool Iterations</label><input id="ag-maxiter" type="number" min="1" value="' + (defs.maxToolIterations != null ? defs.maxToolIterations : '') + '" placeholder="20"><div class="hint">Max tool calls per turn</div></div>' +
+        '<div class="fg"><label>Memory Window</label><input id="ag-memwin" type="number" min="1" value="' + (defs.memoryWindow != null ? defs.memoryWindow : '') + '" placeholder="50"><div class="hint">Messages in context</div></div>' +
+      '</div>' +
+      '<div class="fg"><label>Workspace</label><input id="ag-workspace" value="' + esc(defs.workspace || '') + '" placeholder="/config/nanobot/workspace"></div>' +
+      '<div class="modal-footer">' +
+        '<button class="btn btn-secondary" onclick="closeAgentModal()">Cancel</button>' +
+        '<button class="btn btn-primary" onclick="saveDefaults()">Save</button>' +
+      '</div>' +
+    '</div></div>';
+}
+
+async function saveDefaults() {
+  const model     = document.getElementById('ag-model').value.trim();
+  const vmodel    = document.getElementById('ag-vmodel').value.trim();
+  const maxTokens = document.getElementById('ag-maxtokens').value.trim();
+  const temp      = document.getElementById('ag-temp').value.trim();
+  const maxIter   = document.getElementById('ag-maxiter').value.trim();
+  const memWin    = document.getElementById('ag-memwin').value.trim();
+  const workspace = document.getElementById('ag-workspace').value.trim();
+
+  const defs = {};
+  if (model)    defs.model = model;
+  if (vmodel)   defs.visionModel = vmodel;
+  if (maxTokens) defs.maxTokens = parseInt(maxTokens, 10);
+  if (temp !== '') defs.temperature = parseFloat(temp);
+  if (maxIter)  defs.maxToolIterations = parseInt(maxIter, 10);
+  if (memWin)   defs.memoryWindow = parseInt(memWin, 10);
+  if (workspace) defs.workspace = workspace;
+
+  try {
+    const r = await fetch(apiUrl('/api/config'));
+    const cfg = await r.json();
+    if (!cfg.agents) cfg.agents = {};
+    cfg.agents.defaults = defs;
+    const r2 = await fetch(apiUrl('/api/config'), {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(cfg, null, 2)
+    });
+    if (r2.ok) { showMsg('Defaults saved. Restart to apply.', true); closeAgentModal(); loadAgents(); }
+    else showMsg('Failed to save: ' + r2.statusText, false);
+  } catch(e) { showMsg('Error: ' + e.message, false); }
+}
+
+// ── Profile modal (for cron --agent profiles) ──
+
+async function openProfileModal(editName) {
+  let profile = { systemPrompt: '', model: '' };
   if (editName !== null) {
     try {
       const r = await fetch(apiUrl('/api/config'));
       const cfg = await r.json();
-      agent = (cfg.agents || {})[editName] || {};
-    } catch(e) { showMsg('Failed to load agent: ' + e.message, false); return; }
+      profile = ((cfg.agents || {}).profiles || {})[editName] || {};
+    } catch(e) { showMsg('Failed to load: ' + e.message, false); return; }
   }
   const isNew = editName === null;
   const ct = document.getElementById('agentModalCt');
   ct.style.display = '';
 
   const nameRow = isNew
-    ? '<div class="fg"><label>Name *</label><input id="ag-name" placeholder="my-agent"><div class="hint">Letters, numbers, hyphens, underscores. Cannot be "defaults".</div></div>'
+    ? '<div class="fg"><label>Name *</label><input id="ag-name" placeholder="gerchik-trader"><div class="hint">Used with: nanobot cron add --agent &lt;name&gt;</div></div>'
     : '<div class="fg"><label>Name</label><input id="ag-name" value="' + esc(editName) + '" readonly></div>';
 
   ct.innerHTML =
     '<div class="modal-bg" onclick="if(event.target===this)closeAgentModal()">' +
     '<div class="modal-box">' +
-      '<h3>' + (isNew ? 'New Agent' : 'Edit Agent: ' + esc(editName)) + '</h3>' +
+      '<h3>' + (isNew ? 'New Agent Profile' : 'Edit Profile: ' + esc(editName)) + '</h3>' +
+      '<div class="fg" style="background:#e3f2fd;padding:8px 10px;border-radius:4px;margin-bottom:12px;font-size:12px;color:#1565c0">Profiles are used by cron jobs. The system prompt is passed as a prefix when the cron job runs.</div>' +
       nameRow +
-      '<div class="fg"><label>Model</label><input id="ag-model" value="' + esc(agent.model || '') + '" placeholder="provider/model-name"><div class="hint">e.g. zai/glm-4-flash, gpt-4o, claude-sonnet-4-6, anthropic/claude-3-5-sonnet</div></div>' +
-      '<div class="fg"><label>System Prompt</label><textarea id="ag-prompt" rows="7" placeholder="You are a helpful assistant...">' + esc(agent.systemPrompt || '') + '</textarea></div>' +
-      '<div class="two-col">' +
-        '<div class="fg"><label>Max Tokens</label><input id="ag-maxtokens" type="number" min="1" value="' + (agent.maxTokens != null ? agent.maxTokens : '') + '" placeholder="8192"></div>' +
-        '<div class="fg"><label>Temperature</label><input id="ag-temp" type="number" step="0.1" min="0" max="2" value="' + (agent.temperature != null ? agent.temperature : '') + '" placeholder="0.7"></div>' +
-      '</div>' +
-      '<div class="two-col">' +
-        '<div class="fg"><label>Tool Iterations</label><input id="ag-maxiter" type="number" min="1" value="' + (agent.maxToolIterations != null ? agent.maxToolIterations : '') + '" placeholder="20"><div class="hint">Max tool calls per turn</div></div>' +
-        '<div class="fg"><label>Memory Window</label><input id="ag-memwin" type="number" min="1" value="' + (agent.memoryWindow != null ? agent.memoryWindow : '') + '" placeholder="50"><div class="hint">Messages kept in context</div></div>' +
-      '</div>' +
-      '<div class="fg"><label>Workspace</label><input id="ag-workspace" value="' + esc(agent.workspace || '') + '" placeholder="/config/nanobot/workspace"><div class="hint">Working directory for file operations</div></div>' +
+      '<div class="fg"><label>System Prompt *</label><textarea id="ag-prompt" rows="10" placeholder="You are a specialized agent...">' + esc(profile.systemPrompt || '') + '</textarea></div>' +
+      '<div class="fg"><label>Model override</label><input id="ag-model" value="' + esc(profile.model || '') + '" placeholder="Leave empty to use defaults.model"><div class="hint">Optional — overrides the default model for this profile</div></div>' +
       '<div class="modal-footer">' +
         '<button class="btn btn-secondary" onclick="closeAgentModal()">Cancel</button>' +
-        '<button class="btn btn-primary" onclick=\'saveAgent(' + JSON.stringify(editName) + ',' + isNew + ')\'>Save</button>' +
+        '<button class="btn btn-primary" onclick=\'saveProfile(' + JSON.stringify(editName) + ',' + isNew + ')\'>Save</button>' +
       '</div>' +
     '</div></div>';
 }
@@ -316,61 +392,57 @@ function closeAgentModal() {
   c.style.display = 'none'; c.innerHTML = '';
 }
 
-async function saveAgent(originalName, isNew) {
-  const nameVal    = document.getElementById('ag-name').value.trim();
-  const model      = document.getElementById('ag-model').value.trim();
-  const prompt     = document.getElementById('ag-prompt').value.trim();
-  const maxTokens  = document.getElementById('ag-maxtokens').value.trim();
-  const temp       = document.getElementById('ag-temp').value.trim();
-  const maxIter    = document.getElementById('ag-maxiter').value.trim();
-  const memWin     = document.getElementById('ag-memwin').value.trim();
-  const workspace  = document.getElementById('ag-workspace').value.trim();
+async function saveProfile(originalName, isNew) {
+  const nameVal  = document.getElementById('ag-name').value.trim();
+  const prompt   = document.getElementById('ag-prompt').value.trim();
+  const model    = document.getElementById('ag-model').value.trim();
 
   if (isNew) {
     if (!nameVal) { showMsg('Name is required', false); return; }
     if (!/^[a-zA-Z0-9_-]+$/.test(nameVal)) { showMsg('Name: only letters, numbers, hyphens, underscores', false); return; }
-    if (nameVal === 'defaults') { showMsg('Use the "defaults" entry to edit default settings', false); return; }
   }
+  if (!prompt) { showMsg('System Prompt is required for profiles', false); return; }
 
-  const agentName = isNew ? nameVal : originalName;
-  const agent = {};
-  if (model)    agent.model = model;
-  if (prompt)   agent.systemPrompt = prompt;
-  if (maxTokens) agent.maxTokens = parseInt(maxTokens, 10);
-  if (temp !== '') agent.temperature = parseFloat(temp);
-  if (maxIter)  agent.maxToolIterations = parseInt(maxIter, 10);
-  if (memWin)   agent.memoryWindow = parseInt(memWin, 10);
-  if (workspace) agent.workspace = workspace;
+  const profileName = isNew ? nameVal : originalName;
+  const profile = { systemPrompt: prompt };
+  if (model) profile.model = model;
 
   try {
     const r = await fetch(apiUrl('/api/config'));
     const cfg = await r.json();
     if (!cfg.agents) cfg.agents = {};
-    cfg.agents[agentName] = agent;
+    if (!cfg.agents.profiles) cfg.agents.profiles = {};
+    cfg.agents.profiles[profileName] = profile;
     const r2 = await fetch(apiUrl('/api/config'), {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify(cfg, null, 2)
     });
     if (r2.ok) {
-      showMsg('Agent "' + agentName + '" saved. Restart addon to apply.', true);
+      showMsg('Profile "' + profileName + '" saved. Restart to apply.', true);
       closeAgentModal(); loadAgents();
     } else showMsg('Failed to save: ' + r2.statusText, false);
   } catch(e) { showMsg('Error: ' + e.message, false); }
 }
 
-async function deleteAgent(name) {
-  if (!confirm('Delete agent "' + name + '"?')) return;
+async function deleteProfile(name) {
+  if (!confirm('Delete profile "' + name + '"?')) return;
   try {
     const r = await fetch(apiUrl('/api/config'));
     const cfg = await r.json();
-    if (cfg.agents) delete cfg.agents[name];
+    if (cfg.agents && cfg.agents.profiles) delete cfg.agents.profiles[name];
     const r2 = await fetch(apiUrl('/api/config'), {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify(cfg, null, 2)
     });
-    if (r2.ok) { showMsg('Agent "' + name + '" deleted. Restart to apply.', true); loadAgents(); }
+    if (r2.ok) { showMsg('Profile "' + name + '" deleted.', true); loadAgents(); }
     else showMsg('Delete failed: ' + r2.statusText, false);
   } catch(e) { showMsg('Error: ' + e.message, false); }
+}
+
+// Button wired to "+ Add Agent" in toolbar — opens profile modal
+function openAgentModal(editName) {
+  if (editName === null) openProfileModal(null);
+  else openProfileModal(editName);
 }
 
 // ── MCP Servers ──────────────────────────────────────────────────
@@ -384,7 +456,8 @@ async function loadMcpServers() {
     const servers = (cfg.tools && cfg.tools.mcpServers) || {};
     const builtin = [], custom = [];
     for (const [name, srv] of Object.entries(servers)) {
-      const entry = { name, command: srv.command || '', args: srv.args || [], env: srv.env || {} };
+      const entry = { name, command: srv.command || '', args: srv.args || [], env: srv.env || {},
+                      url: srv.url || '', headers: srv.headers || {}, toolTimeout: srv.toolTimeout ?? null };
       (BUILTIN_SERVERS.includes(name) ? builtin : custom).push(entry);
     }
     renderMcpCards('builtinList', builtin, false);
@@ -414,13 +487,19 @@ function renderMcpCards(containerId, servers, canDelete) {
     const badge = canDelete
       ? '<span class="badge">custom</span>'
       : '<span class="badge badge-builtin">built-in</span>';
-    const argsHtml = s.args.length
-      ? '<div class="card-detail"><strong>Args:</strong> <code>' + esc(s.args.join(' ')) + '</code></div>'
+    // stdio mode
+    const cmdHtml = s.command
+      ? '<div class="card-detail"><strong>Command:</strong> <code>' + esc(s.command) + '</code></div>' +
+        (s.args.length ? '<div class="card-detail"><strong>Args:</strong> <code>' + esc(s.args.join(' ')) + '</code></div>' : '')
       : '';
+    // HTTP mode
+    const urlHtml = s.url ? '<div class="card-detail"><strong>URL:</strong> <code>' + esc(s.url) + '</code></div>' : '';
+    const timeoutHtml = s.toolTimeout ? '<div class="card-detail"><strong>Tool Timeout:</strong> ' + s.toolTimeout + 's</div>' : '';
     return '<div class="card">' +
-      '<div class="card-head"><span class="card-name">' + esc(s.name) + '</span>' + badge + '</div>' +
-      '<div class="card-detail"><strong>Command:</strong> <code>' + esc(s.command) + '</code></div>' +
-      argsHtml +
+      '<div class="card-head"><span class="card-name">' + esc(s.name) + '</span>' + badge +
+        (s.url ? '<span class="badge" style="background:#e8f5e9;color:#2e7d32">HTTP</span>' : '<span class="badge" style="background:#fafafa;color:#888">stdio</span>') +
+      '</div>' +
+      cmdHtml + urlHtml + timeoutHtml +
       mcpEnvHtml(s.env) +
       '<div class="card-actions">' +
         '<button class="btn btn-secondary btn-sm" onclick=\'openMcpModal(' + JSON.stringify(s.name) + ')\'>Edit</button>' +
@@ -430,17 +509,22 @@ function renderMcpCards(containerId, servers, canDelete) {
 }
 
 async function openMcpModal(editName) {
-  let srv = { command: '', args: [], env: {} };
+  let srv = { command: '', args: [], env: {}, url: '', headers: {}, toolTimeout: '' };
   if (editName !== null) {
     try {
       const r = await fetch(apiUrl('/api/config'));
       const cfg = await r.json();
       const s = ((cfg.tools || {}).mcpServers || {})[editName] || {};
-      srv = { command: s.command || '', args: s.args || [], env: s.env || {} };
+      srv = {
+        command: s.command || '', args: s.args || [], env: s.env || {},
+        url: s.url || '', headers: s.headers || {},
+        toolTimeout: s.toolTimeout != null ? s.toolTimeout : ''
+      };
     } catch(e) { showMsg('Failed to load server: ' + e.message, false); return; }
   }
   const isNew = editName === null;
   const envStr = Object.entries(srv.env).map(([k, v]) => k + '=' + v).join('\\n');
+  const headersStr = Object.entries(srv.headers).map(([k, v]) => k + '=' + v).join('\\n');
   const ct = document.getElementById('mcpModalCt');
   ct.style.display = '';
 
@@ -449,7 +533,7 @@ async function openMcpModal(editName) {
     : '<div class="fg"><label>Name</label><input id="mcp-name" value="' + esc(editName) + '" readonly></div>';
 
   const builtinNote = (!isNew && BUILTIN_SERVERS.includes(editName))
-    ? '<div style="background:#fff3e0;color:#e65100;font-size:12px;padding:8px 10px;border-radius:4px;margin-bottom:12px">⚠ Built-in server — changes will override the auto-generated config on next restart.</div>'
+    ? '<div style="background:#fff3e0;color:#e65100;font-size:12px;padding:8px 10px;border-radius:4px;margin-bottom:12px">⚠ Built-in server — changes override auto-generated config on restart.</div>'
     : '';
 
   ct.innerHTML =
@@ -458,9 +542,15 @@ async function openMcpModal(editName) {
       '<h3>' + (isNew ? 'Add MCP Server' : 'Edit: ' + esc(editName)) + '</h3>' +
       builtinNote +
       nameRow +
-      '<div class="fg"><label>Command *</label><input id="mcp-cmd" value="' + esc(srv.command) + '" placeholder="/usr/bin/mcp-server"><div class="hint">Full path to the MCP server binary or executable</div></div>' +
-      '<div class="fg"><label>Arguments</label><input id="mcp-args" value="' + esc(srv.args.join(' ')) + '" placeholder="--transport=streamablehttp --stateless https://..."><div class="hint">Space-separated arguments</div></div>' +
-      '<div class="fg"><label>Environment Variables</label><textarea id="mcp-env" rows="6" placeholder="API_ACCESS_TOKEN=abc123&#10;BASE_URL=https://example.com">' + esc(envStr) + '</textarea><div class="hint">One per line: KEY=value. Sensitive values are masked in the list but stored as-is.</div></div>' +
+      '<div class="section-title" style="margin-top:8px">Stdio mode</div>' +
+      '<div class="fg"><label>Command</label><input id="mcp-cmd" value="' + esc(srv.command) + '" placeholder="/opt/nanobot-venv/bin/mcp-proxy"><div class="hint">Full path to MCP server binary</div></div>' +
+      '<div class="fg"><label>Arguments</label><input id="mcp-args" value="' + esc(srv.args.join(' ')) + '" placeholder="--transport=streamablehttp --stateless https://..."><div class="hint">Space-separated</div></div>' +
+      '<div class="fg"><label>Environment Variables</label><textarea id="mcp-env" rows="5" placeholder="API_ACCESS_TOKEN=abc123&#10;BASE_URL=https://example.com">' + esc(envStr) + '</textarea><div class="hint">One per line: KEY=value</div></div>' +
+      '<div class="section-title">HTTP mode (alternative)</div>' +
+      '<div class="fg"><label>URL</label><input id="mcp-url" value="' + esc(srv.url) + '" placeholder="https://example.com/mcp"><div class="hint">Streamable HTTP endpoint — use instead of Command</div></div>' +
+      '<div class="fg"><label>HTTP Headers</label><textarea id="mcp-headers" rows="3" placeholder="Authorization=Bearer token&#10;X-Custom=value">' + esc(headersStr) + '</textarea><div class="hint">One per line: KEY=value</div></div>' +
+      '<div class="section-title">Common</div>' +
+      '<div class="fg" style="max-width:180px"><label>Tool Timeout (s)</label><input id="mcp-timeout" type="number" min="1" value="' + esc(srv.toolTimeout) + '" placeholder="30"><div class="hint">Seconds before tool call is cancelled</div></div>' +
       '<div class="modal-footer">' +
         '<button class="btn btn-secondary" onclick="closeMcpModal()">Cancel</button>' +
         '<button class="btn btn-primary" onclick=\'saveMcpServer(' + JSON.stringify(editName) + ',' + isNew + ')\'>Save</button>' +
@@ -474,27 +564,31 @@ function closeMcpModal() {
 }
 
 async function saveMcpServer(originalName, isNew) {
-  const nameVal = document.getElementById('mcp-name').value.trim();
-  const cmd     = document.getElementById('mcp-cmd').value.trim();
-  const argsStr = document.getElementById('mcp-args').value.trim();
-  const envStr  = document.getElementById('mcp-env').value.trim();
+  const nameVal    = document.getElementById('mcp-name').value.trim();
+  const cmd        = document.getElementById('mcp-cmd').value.trim();
+  const argsStr    = document.getElementById('mcp-args').value.trim();
+  const envStr     = document.getElementById('mcp-env').value.trim();
+  const url        = document.getElementById('mcp-url').value.trim();
+  const headersStr = document.getElementById('mcp-headers').value.trim();
+  const timeout    = document.getElementById('mcp-timeout').value.trim();
 
   if (isNew) {
     if (!nameVal) { showMsg('Name is required', false); return; }
     if (!/^[a-zA-Z0-9_-]+$/.test(nameVal)) { showMsg('Name: only letters, numbers, hyphens, underscores', false); return; }
   }
-  if (!cmd) { showMsg('Command is required', false); return; }
+  if (!cmd && !url) { showMsg('Command or URL is required', false); return; }
 
   const args = argsStr ? argsStr.trim().split(/\\s+/) : [];
-  const env = {};
-  if (envStr) {
-    for (const line of envStr.split('\\n')) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      const eq = trimmed.indexOf('=');
-      if (eq > 0) env[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1);
+  const env = {}, headers = {};
+  const parseKV = (str, obj) => {
+    for (const line of str.split('\\n')) {
+      const t = line.trim(); if (!t) continue;
+      const eq = t.indexOf('=');
+      if (eq > 0) obj[t.slice(0, eq).trim()] = t.slice(eq + 1);
     }
-  }
+  };
+  if (envStr) parseKV(envStr, env);
+  if (headersStr) parseKV(headersStr, headers);
 
   const srvName = isNew ? nameVal : originalName;
   try {
@@ -502,7 +596,12 @@ async function saveMcpServer(originalName, isNew) {
     const cfg = await r.json();
     if (!cfg.tools) cfg.tools = {};
     if (!cfg.tools.mcpServers) cfg.tools.mcpServers = {};
-    cfg.tools.mcpServers[srvName] = { command: cmd, args, env };
+    const srv = {};
+    if (cmd) { srv.command = cmd; srv.args = args; srv.env = env; }
+    if (url) { srv.url = url; if (Object.keys(headers).length) srv.headers = headers; }
+    if (!cmd && url && Object.keys(env).length) srv.env = env;
+    if (timeout) srv.toolTimeout = parseInt(timeout, 10);
+    cfg.tools.mcpServers[srvName] = srv;
     const r2 = await fetch(apiUrl('/api/config'), {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify(cfg, null, 2)

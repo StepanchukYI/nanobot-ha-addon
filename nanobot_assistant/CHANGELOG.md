@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.20 (2026-02-24)
+
+### Fixed
+
+- Agents tab: align with real schema of nanobot fork — `agents.defaults` has no `systemPrompt`; named profiles live under `agents.profiles` with only `systemPrompt` + `model`
+- `generate_config.py`: write system prompt to `workspace/IDENTITY.md` (bootstrap file) instead of ignoring it in `agents.defaults`
+- `generate_config.py`: auto-migrate old-format named agents from `agents.<name>` to `agents.profiles.<name>` on restart
+- MCP Servers modal: add HTTP mode fields — `url`, `headers`, `toolTimeout`
+
 ## 0.1.19 (2026-02-24)
 
 ### Added

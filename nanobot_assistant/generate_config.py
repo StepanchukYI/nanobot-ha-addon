@@ -62,7 +62,8 @@ def create_default_config():
                 "temperature": 0.7,
                 "maxToolIterations": 20,
                 "memoryWindow": 50,
-            }
+            },
+            "profiles": {},
         },
         "channels": {},
         "tools": {
@@ -227,21 +228,86 @@ def load_system_prompt(ha_prompt: str) -> str:
 
 
 def apply_advanced_options(config, advanced):
-    """Apply Advanced section from HA options (timezone handled by run.sh)."""
+    """Apply Advanced section from HA options (timezone handled by run.sh).
+
+    System prompt is written to workspace/IDENTITY.md (bootstrap file that
+    nanobot reads automatically), because AgentDefaults has no systemPrompt field.
+    The bootstrap files loaded by nanobot are: AGENTS.md, SOUL.md, USER.md,
+    TOOLS.md, IDENTITY.md — from the workspace directory.
+    """
     ha_prompt = advanced.get("system_prompt", "").strip()
     max_tokens = advanced.get("max_tokens")
     temperature = advanced.get("temperature")
 
     defaults = config.setdefault("agents", {}).setdefault("defaults", {})
 
+    # systemPrompt does NOT belong in agents.defaults (not in AgentDefaults schema).
+    # Write it to workspace/IDENTITY.md — nanobot loads this as a bootstrap file
+    # and prepends it to every system prompt automatically.
     system_prompt = load_system_prompt(ha_prompt)
+    workspace = defaults.get("workspace", os.path.join(NANOBOT_HOME, "workspace"))
+    identity_file = os.path.join(workspace, "IDENTITY.md")
     if system_prompt:
-        defaults["systemPrompt"] = system_prompt
+        try:
+            os.makedirs(workspace, exist_ok=True)
+            with open(identity_file, "w") as f:
+                f.write(system_prompt)
+            print(f"[INFO] System prompt written to {identity_file}")
+        except OSError as e:
+            print(f"[WARN] Could not write {identity_file}: {e}")
+    elif os.path.exists(identity_file):
+        # If prompt was cleared in HA settings and no file-based prompt, remove it
+        try:
+            os.remove(identity_file)
+            print(f"[INFO] Removed empty {identity_file}")
+        except OSError:
+            pass
+
+    # Remove legacy systemPrompt from defaults if it crept in from old config
+    defaults.pop("systemPrompt", None)
 
     if max_tokens is not None:
         defaults["maxTokens"] = int(max_tokens)
     if temperature is not None:
         defaults["temperature"] = float(temperature)
+
+
+def migrate_agents_to_profiles(config):
+    """Migrate old-format named agents to agents.profiles.
+
+    Old format (pre-0.1.19): named agents were stored directly under agents:
+        {"agents": {"defaults": {...}, "my-agent": {"systemPrompt": ..., "model": ...}}}
+
+    New format (AgentsConfig schema): named agents live under agents.profiles:
+        {"agents": {"defaults": {...}, "profiles": {"my-agent": {"systemPrompt": ..., "model": ...}}}}
+
+    Also removes legacy systemPrompt from agents.defaults (not in AgentDefaults schema).
+    """
+    agents = config.get("agents", {})
+    profiles = agents.setdefault("profiles", {})
+    defaults_keys = {"defaults", "profiles"}
+
+    for key in list(agents.keys()):
+        if key in defaults_keys:
+            continue
+        # It's a stale named agent at the top level — move it to profiles
+        old_agent = agents.pop(key)
+        # profiles only support systemPrompt + model
+        profile_entry = {}
+        sp = old_agent.get("systemPrompt") or old_agent.get("system_prompt")
+        if sp:
+            profile_entry["systemPrompt"] = sp
+        model = old_agent.get("model")
+        if model:
+            profile_entry["model"] = model
+        if profile_entry and key not in profiles:
+            profiles[key] = profile_entry
+            print(f"[INFO] Migrated agent '{key}' → agents.profiles.{key}")
+        elif not profile_entry:
+            print(f"[WARN] Agent '{key}' has no systemPrompt, skipping migration to profiles")
+
+    # Remove legacy systemPrompt from defaults
+    agents.get("defaults", {}).pop("systemPrompt", None)
 
 
 def main():
@@ -277,6 +343,13 @@ def main():
     config.setdefault("agents", {}).setdefault("defaults", {}).setdefault(
         "workspace", os.path.join(NANOBOT_HOME, "workspace")
     )
+
+    # Ensure profiles dict exists under agents
+    config.setdefault("agents", {}).setdefault("profiles", {})
+
+    # Migrate old-format named agents: agents.<name> → agents.profiles.<name>
+    # (old format stored named agents directly under agents, new format uses agents.profiles)
+    migrate_agents_to_profiles(config)
 
     # Ensure gateway config
     config.setdefault("gateway", {"host": "0.0.0.0", "port": 18790})
