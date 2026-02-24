@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.19 (2026-02-24)
+
+### Added
+
+- Agents tab in Web UI — create, edit and delete nanobot agents with all settings: model, system prompt, maxTokens, temperature, maxToolIterations, memoryWindow, workspace
+- MCP Servers: Edit button for all servers including built-in (homeassistant, exchange); env values masked in list but editable in form; warning shown when overriding built-in config
+
 ## 0.1.18 (2026-02-24)
 
 ### Changed
