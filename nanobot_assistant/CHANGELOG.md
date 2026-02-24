@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.18 (2026-02-24)
+
+### Changed
+
+- Switch nanobot source from PyPI to custom fork `StepanchukYI/nanobot@feat/cron-named-agent-profiles` with cron fix and named agent profiles support
+
 ## 0.1.17 (2026-02-22)
 
 ### Fixed
