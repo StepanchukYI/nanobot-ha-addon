@@ -18,7 +18,7 @@ RUN python3 -m venv /opt/nanobot-venv
 # Install nanobot from custom fork branch + mcp-proxy
 RUN /opt/nanobot-venv/bin/pip install --no-cache-dir --upgrade pip && \
     /opt/nanobot-venv/bin/pip install --no-cache-dir \
-        "git+https://github.com/StepanchukYI/nanobot.git@7ced88b" \
+        "git+https://github.com/StepanchukYI/nanobot.git@afa8994" \
         "mcp-proxy>=0.3.0"
 
 # Clone EWS MCP server (pip entry point is broken, must run from source)
