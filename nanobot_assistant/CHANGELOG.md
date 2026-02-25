@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.25 (2026-02-25)
+
+### Changed
+
+- pin nanobot to commit b63d738 (feat/cron-named-agent-profiles)
+
 ## 0.1.24 (2026-02-25)
 
 ### Changed
