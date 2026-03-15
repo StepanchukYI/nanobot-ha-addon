@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.27 (2026-03-15)
+
+### Changed
+
+- Switch nanobot source from old feature branch to `dev` (rebased on latest upstream main)
+- New features included: vision model preprocessor, event webhook trigger, telegram emoji reactions, litellm api_base fix, named agent profiles
+
+### Added
+
+- `vision_model` option in LLM settings — preprocesses images via a vision-capable model when the main model doesn't support vision
+- `react_emoji` option in Telegram settings — auto-react to incoming messages with an emoji (e.g. `eyes`)
+
 ## 0.1.26 (2026-02-26)
 
 ### Changed

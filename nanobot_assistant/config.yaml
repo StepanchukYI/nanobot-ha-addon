@@ -1,6 +1,6 @@
 name: "Nanobot — AI Assistant for Raspberry Pi"
 description: "Ultra-lightweight AI assistant (~100 MB RAM) built for Raspberry Pi and low-power devices. Multi-provider LLM support (Zhipu, OpenRouter, OpenAI, Anthropic, DeepSeek, Gemini, Ollama). MCP tools, Telegram bot, Exchange calendar, scheduled tasks."
-version: "0.1.26"
+version: "0.1.27"
 slug: "nanobot_assistant"
 url: "https://github.com/HKUDS/nanobot"
 arch:
@@ -27,10 +27,12 @@ options:
     api_key: ""
     model: "zai/glm-4-flash"
     api_base: "https://open.bigmodel.cn/api/coding/paas/v4"
+    vision_model: ""
   telegram:
     enabled: false
     token: ""
     allow_from: []
+    react_emoji: ""
   homeassistant_mcp:
     enabled: true
     url: "http://localhost:8123/api/mcp"
@@ -54,11 +56,13 @@ schema:
     api_key: "password"
     model: "str"
     api_base: "url?"
+    vision_model: "str?"
   telegram:
     enabled: "bool"
     token: "password?"
     allow_from:
       - "str"
+    react_emoji: "str?"
   homeassistant_mcp:
     enabled: "bool"
     url: "url?"

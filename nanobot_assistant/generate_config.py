@@ -111,6 +111,11 @@ def apply_llm_options(config, llm):
     if model:
         config.setdefault("agents", {}).setdefault("defaults", {})["model"] = model
 
+    # Vision model
+    vision_model = llm.get("vision_model", "").strip()
+    if vision_model:
+        config.setdefault("agents", {}).setdefault("defaults", {})["visionModel"] = vision_model
+
 
 def apply_telegram_options(config, telegram):
     """Apply Telegram section from HA options."""
@@ -121,12 +126,16 @@ def apply_telegram_options(config, telegram):
     # Clean up empty strings from allow_from
     allow_from = [x.strip() for x in allow_from if x.strip()]
 
+    react_emoji = telegram.get("react_emoji", "").strip()
+
     if enabled and token:
         existing_tg = config.get("channels", {}).get("telegram", {})
         tg_config = {
             "enabled": True,
             "token": token,
         }
+        if react_emoji:
+            tg_config["reactEmoji"] = react_emoji
         # Preserve existing allowFrom if HA UI list is empty
         if allow_from:
             tg_config["allowFrom"] = allow_from
