@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.30 (2026-03-16)
+
+### Added
+
+- Custom slash commands system: agent can create `/camera`, `/status`, etc.
+- Three command modes: `script` (no LLM), `agent` (prompt injection), `mixed` (script + agent)
+- Commands auto-register in Telegram bot menu
+- New `command` tool for agent to manage commands at runtime
+- Commands stored in `workspace/commands.json`
+
 ## 0.1.27 (2026-03-15)
 
 ### Changed
