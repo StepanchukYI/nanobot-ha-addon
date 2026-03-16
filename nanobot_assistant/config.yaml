@@ -1,6 +1,6 @@
 name: "Nanobot — AI Assistant for Raspberry Pi"
 description: "Ultra-lightweight AI assistant (~100 MB RAM) built for Raspberry Pi and low-power devices. Multi-provider LLM support (Zhipu, OpenRouter, OpenAI, Anthropic, DeepSeek, Gemini, Ollama). MCP tools, Telegram bot, Exchange calendar, scheduled tasks."
-version: "0.1.27"
+version: "0.1.28"
 slug: "nanobot_assistant"
 url: "https://github.com/HKUDS/nanobot"
 arch:
@@ -22,64 +22,15 @@ ports_description:
   18790/tcp: "Nanobot Gateway"
   8080/tcp: "Web UI (chat, settings, logs)"
 options:
-  llm:
-    provider: "zhipu"
-    api_key: ""
-    model: "zai/glm-4-flash"
-    api_base: "https://open.bigmodel.cn/api/coding/paas/v4"
-    vision_model: ""
-  telegram:
-    enabled: false
-    token: ""
-    allow_from: []
-    react_emoji: ""
-  homeassistant_mcp:
-    enabled: true
-    url: "http://localhost:8123/api/mcp"
-    token: ""
-  exchange_mcp:
-    enabled: false
-    server_url: ""
-    email: ""
-    auth_type: "ntlm"
-    username: ""
-    password: ""
-  advanced:
-    system_prompt: ""
-    ha_config_access: false
-    timezone: "Europe/Kiev"
-    max_tokens: 8192
-    temperature: 0.7
+  CONFIG_PATH: "/config/nanobot"
+  DATA_PATH: "/data/nanobot"
+  ha_config_access: false
+  timezone: "Europe/Kiev"
 schema:
-  llm:
-    provider: "str"
-    api_key: "password"
-    model: "str"
-    api_base: "url?"
-    vision_model: "str?"
-  telegram:
-    enabled: "bool"
-    token: "password?"
-    allow_from:
-      - "str"
-    react_emoji: "str?"
-  homeassistant_mcp:
-    enabled: "bool"
-    url: "url?"
-    token: "password?"
-  exchange_mcp:
-    enabled: "bool"
-    server_url: "str?"
-    email: "str?"
-    auth_type: "str?"
-    username: "str?"
-    password: "password?"
-  advanced:
-    system_prompt: "str?"
-    ha_config_access: "bool"
-    timezone: "str?"
-    max_tokens: "int?"
-    temperature: "float?"
+  CONFIG_PATH: "str"
+  DATA_PATH: "str"
+  ha_config_access: "bool"
+  timezone: "str?"
 panel_icon: "mdi:robot-happy"
 panel_title: "Nanobot"
 ingress: true

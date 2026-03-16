@@ -6,172 +6,212 @@ Ultra-lightweight AI assistant (~100 MB RAM) built for Raspberry Pi and low-powe
 
 1. Install the add-on from the repository
 2. Start the add-on
-3. Open **Settings → Add-ons → Nanobot Assistant → Configuration**
-4. Expand the **LLM** section and set your provider, API key, and model
-5. Click **Save** and restart the add-on
+3. Edit `/config/nanobot/config.json` (via File Editor, VS Code Server, or Ansible)
+4. Set your LLM provider, API key, Telegram token, MCP servers
+5. Restart the add-on
 
-## Configuration
+## Add-on Options
 
-All settings are configured via the **Configuration** tab in the add-on panel.
-Settings are organized into collapsible sections:
+Since v0.1.28, add-on options are minimal — just paths and basic flags.
+All actual configuration lives in `config.json`.
 
-### LLM
+| Option | Description |
+|--------|-------------|
+| `CONFIG_PATH` | Path to nanobot config directory (default: `/config/nanobot`) |
+| `DATA_PATH` | Path to nanobot data directory (default: `/data/nanobot`) |
+| `ha_config_access` | Allow bot to read/edit HA config files |
+| `timezone` | Timezone (e.g. `Europe/Kiev`) |
 
-| Field | Description |
-|-------|-------------|
-| `provider` | Provider name: `zhipu`, `openrouter`, `openai`, `anthropic`, `deepseek`, `gemini`, `vllm` |
-| `api_key` | Your API key for the provider |
-| `model` | Model name (e.g. `anthropic/claude-sonnet-4`, `gpt-4o`, `zai/glm-4-flash`) |
-| `api_base` | (Optional) Custom API base URL. Auto-filled for known providers |
+## Configuration (config.json)
 
-> **Zhipu GLM-4-Flash** is the default — it's the cheapest provider that handles smart home tasks well.
-> Switch to OpenRouter, Anthropic, OpenAI, or any other provider for more advanced conversations.
+All settings are in `/config/nanobot/config.json`. Edit it with File Editor,
+VS Code Server addon, or deploy via Ansible.
 
-### Telegram
+**On first install**, a default config.json is created automatically.
+**On restart**, the addon NEVER overwrites your config.json.
 
-| Field | Description |
-|-------|-------------|
-| `enabled` | Enable Telegram bot |
-| `token` | Bot token from `@BotFather` |
-| `allow_from` | List of allowed Telegram User IDs (get yours from `@userinfobot`). Empty = everyone can write |
+### Example config.json
 
-### Home Assistant MCP
+```json
+{
+  "providers": {
+    "zhipu": {
+      "apiKey": "your-api-key",
+      "apiBase": "https://open.bigmodel.cn/api/coding/paas/v4"
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": "zai/glm-4-flash",
+      "workspace": "/config/nanobot/workspace",
+      "maxTokens": 8192,
+      "temperature": 0.7
+    },
+    "profiles": {}
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "token": "bot-token-from-botfather",
+      "allowFrom": ["123456789"]
+    }
+  },
+  "tools": {
+    "mcpServers": {
+      "homeassistant": {
+        "command": "/opt/nanobot-venv/bin/mcp-proxy",
+        "args": ["--transport=streamablehttp", "--stateless", "https://your-ha.example.com/api/mcp"],
+        "env": {
+          "API_ACCESS_TOKEN": "your-ha-long-lived-token"
+        }
+      }
+    }
+  },
+  "gateway": {
+    "host": "0.0.0.0",
+    "port": 18790
+  }
+}
+```
 
-| Field | Description |
-|-------|-------------|
-| `enabled` | Enable Home Assistant MCP integration |
-| `url` | MCP server URL (default: `http://localhost:8123/api/mcp`) |
-| `token` | Long-Lived Access Token (Profile → Security → Long-Lived Access Tokens → Create) |
+## Home Assistant MCP
 
-Requires the **Model Context Protocol Server** integration installed in HA:
-**Settings → Devices & Services → Add Integration → Model Context Protocol Server**
+The bot can control Home Assistant via the Model Context Protocol (MCP).
 
-The add-on uses `mcp-proxy` as a stdio-to-Streamable-HTTP bridge for reliable MCP connection.
+### Setup
 
-### Exchange MCP (Email & Calendar)
+1. **Install MCP integration in HA:**
+   Settings → Devices & Services → Add Integration → **Model Context Protocol Server**
 
-| Field | Description |
-|-------|-------------|
-| `enabled` | Enable Exchange MCP integration |
-| `server_url` | Exchange server hostname (e.g. `mail.company.com`) |
-| `email` | Your Exchange email address |
-| `auth_type` | Authentication type: `ntlm` (on-premises), `basic`, or `oauth2` (Office 365) |
-| `username` | Exchange username (usually same as email) |
-| `password` | Exchange password |
+2. **Create a Long-Lived Access Token:**
+   HA Profile (bottom-left) → Security → Long-Lived Access Tokens → Create Token
 
-When enabled, the bot gets access to:
-- **Email** — read, send, search, reply, forward
-- **Calendar** — view events, create appointments, check availability
-- **Contacts** — search, create, update
-- **Tasks** — create, update, complete
+3. **Add MCP server to config.json** (`tools.mcpServers.homeassistant`):
 
-Uses [ews-mcp-server](https://github.com/azizmazrou/ews-mcp) as stdio MCP server.
-Timezone is inherited from the Advanced section.
+```json
+"homeassistant": {
+  "command": "/opt/nanobot-venv/bin/mcp-proxy",
+  "args": [
+    "--transport=streamablehttp",
+    "--stateless",
+    "https://your-ha-url/api/mcp"
+  ],
+  "env": {
+    "API_ACCESS_TOKEN": "your-long-lived-token"
+  }
+}
+```
 
-### Advanced
+### MCP URL — which URL to use?
 
-| Field | Description |
-|-------|-------------|
-| `system_prompt` | Custom system prompt for the bot personality |
-| `ha_config_access` | Allow bot to read/edit HA config files (automations.yaml, scripts.yaml, etc.) |
-| `timezone` | Timezone (e.g. `Europe/Kiev`, `America/New_York`) |
-| `max_tokens` | Maximum response tokens (default: 8192) |
-| `temperature` | LLM temperature 0.0–1.0 (default: 0.7) |
+The addon runs with `host_network: true`, so Docker DNS names like `homeassistant` are NOT available.
 
-#### System Prompt
+| Setup | URL to use |
+|-------|-----------|
+| HA with SSL via NPM/Cloudflare | `https://your-domain.com/api/mcp` |
+| HA with SSL (built-in) | `https://10.0.x.x:443/api/mcp` (add `--insecure` to args if self-signed) |
+| HA without SSL | `http://10.0.x.x:8123/api/mcp` |
 
-Two ways to set the system prompt:
+> **Do NOT use** `http://localhost:8123/api/mcp` if HA is configured with `server_port: 443` or SSL.
+> **Do NOT use** `http://homeassistant:8123/api/mcp` — Docker DNS doesn't work with host_network.
 
-1. **HA Settings field** — paste into `system_prompt` in Advanced section
-2. **File** — create `/config/nanobot/system_prompt.txt` via File Editor (used when HA field is empty)
+### Capabilities
 
-File method is more convenient for long prompts with formatting.
+Once connected, the bot can:
+- Toggle lights, switches, climate, covers
+- Read sensor states and attributes
+- Run automations and scripts
+- Call any HA service
+- Query entity history
 
-#### HA Config Access
+## Adding Custom MCP Servers
 
-When enabled, the bot can:
-- Read and edit `automations.yaml`, `scripts.yaml`, `scenes.yaml`
-- Create new automations and scripts
-- Call HA Supervisor API for service reloads
+Add any MCP server to `tools.mcpServers` in config.json:
 
-HA config is available at `workspace/ha-config/` inside the bot's workspace.
+```json
+"my-server": {
+  "command": "/usr/bin/npx",
+  "args": ["-y", "some-mcp-package"],
+  "env": {
+    "API_KEY": "key"
+  }
+}
+```
+
+Restart the addon after changes. All MCP servers in config.json are preserved — the addon never removes them.
+
+## Exchange MCP (Email & Calendar)
+
+```json
+"exchange": {
+  "command": "/opt/nanobot-venv/bin/ews-mcp-server",
+  "args": [],
+  "env": {
+    "EWS_SERVER_URL": "https://mail.company.com",
+    "EWS_EMAIL": "you@company.com",
+    "EWS_AUTH_TYPE": "ntlm",
+    "EWS_USERNAME": "you@company.com",
+    "EWS_PASSWORD": "password",
+    "TIMEZONE": "Europe/Kiev"
+  }
+}
+```
+
+Gives the bot access to email, calendar, contacts, and tasks via Exchange Web Services.
 
 ## Supported LLM Providers
 
 | Provider | Key in config | Example Model | Notes |
 |----------|--------------|---------------|-------|
-| Zhipu AI | `zhipu` | `zai/glm-4-flash` | Default. Cheapest option for smart home tasks |
-| OpenRouter | `openrouter` | `anthropic/claude-sonnet-4` | 100+ models via single API |
+| Zhipu AI | `zhipu` | `zai/glm-4-flash` | Default. Cheapest for smart home |
+| OpenRouter | `openrouter` | `anthropic/claude-sonnet-4` | 100+ models |
 | OpenAI | `openai` | `gpt-4o` | GPT models |
-| Anthropic | `anthropic` | `claude-sonnet-4-5` | Direct Anthropic API |
-| DeepSeek | `deepseek` | `deepseek-chat` | Budget-friendly, strong reasoning |
+| Anthropic | `anthropic` | `claude-sonnet-4-5` | Direct API |
+| DeepSeek | `deepseek` | `deepseek-chat` | Budget-friendly |
 | Gemini | `gemini` | `gemini-2.5-flash` | Google models |
-| Ollama (local) | `vllm` | any local model | No API costs, runs on your hardware |
+| Ollama | `vllm` | any local model | No API costs |
 
-Any OpenAI-compatible API can be used — just set `provider`, `api_key`, `api_base`, and `model`.
+Set `provider`, `apiKey`, `apiBase` in `providers` section of config.json.
+
+## System Prompt
+
+Two ways to set a custom system prompt:
+
+1. **File** — create `/config/nanobot/system_prompt.txt` (loaded as IDENTITY.md)
+2. **In config.json** — not directly supported; use the file method
 
 ## User Files
 
-The add-on exposes its working files at `/config/nanobot/`:
+All files at `/config/nanobot/` (editable via File Editor / VS Code Server):
 
-- `config.json` — generated nanobot configuration (merged from HA settings)
+- `config.json` — main configuration
 - `system_prompt.txt` — custom system prompt (optional)
 - `skills/` — custom bot skills
 - `workspace/` — agent working directory, memory
-- `gateway.log` — gateway log file
+- `gateway.log` — gateway log
 
-You can edit files directly via File Editor. Manual changes to `config.json` are preserved
-on restart — HA settings override only the fields you change in the UI.
+## Migration from v0.1.27
 
-## MCP Servers
-
-The Web UI has a dedicated **MCP Servers** tab where you can manage all MCP connections:
-
-- **Built-in servers** (Home Assistant, Exchange) are configured via HA Settings and shown as read-only
-- **Custom servers** can be added/removed directly from the Web UI
-- Click **+ Add Server** to add a new MCP server: provide a name, command path, optional arguments and environment variables
-- Changes require an addon restart to take effect
-
-Custom servers added via the Web UI are preserved across restarts — `generate_config.py` only touches built-in server entries.
-
-You can also add servers manually to `tools.mcpServers` in `/config/nanobot/config.json`.
-
-## Scheduled Tasks (Cron)
-
-You can add tasks via Telegram by sending a message like:
-
-```
-Every morning at 8:00 send me a summary of house temperatures
-```
-
-Or via CLI:
-
-```
-nanobot cron add --name "morning" --message "Temperature summary" --cron "0 8 * * *"
-```
+If upgrading from v0.1.27 (old options format with llm/telegram/mcp sections):
+- The addon automatically migrates old HA options into config.json (one-time)
+- After migration, old options are ignored
+- Set new simple options (CONFIG_PATH, DATA_PATH) and save
 
 ## Troubleshooting
 
 **Bot not responding:**
-- Check the API key in Configuration tab
-- Check the add-on logs
+- Check API key in config.json (`providers.<name>.apiKey`)
+- Check add-on logs
+
+**MCP not connecting (401 Unauthorized):**
+- Verify Long-Lived Access Token is valid
+- Check URL is correct for your network setup (see MCP URL table above)
+- Make sure MCP Server integration is installed in HA
+
+**MCP not connecting (Connection refused):**
+- Don't use `localhost` or `homeassistant` hostname — use IP or external domain
+- Check HA port (443 if SSL, 8123 if not)
 
 **Telegram not working:**
-- Make sure the bot token is correct
-- Verify your User ID is in `allow_from`
-- If `allow_from` keeps resetting: set IDs directly in config.json — they'll be preserved when UI list is empty
-
-**MCP not connecting:**
-- Make sure the MCP Server integration is installed in HA
-- Check your Long-Lived Access Token
-- The add-on uses `mcp-proxy` for reliable connection; check logs for HTTP status codes
-
-**Exchange not connecting:**
-- Verify your Exchange server URL (try `https://your-server/EWS/Exchange.asmx` in a browser)
-- For on-premises Exchange use `ntlm` auth type
-- Check that your credentials are correct
-- Ensure your Exchange server is reachable from the HA host
-
-## Data
-
-All data is stored persistently and accessible at `/config/nanobot/` for easy editing.
+- Check bot token in config.json
+- Verify User ID in `allowFrom`

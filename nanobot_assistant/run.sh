@@ -2,11 +2,15 @@
 # ============================================================
 # Nanobot Assistant — Home Assistant Add-on entry point
 # Manages: Web UI (port 8080) + Nanobot Gateway (port 18790)
+#
+# v0.1.28: config.json is managed externally (Ansible/File Editor).
+# Options only define CONFIG_PATH, DATA_PATH, timezone, ha_config_access.
 # ============================================================
 
-# /config = addon_config (visible from other addons like File Editor, VS Code)
-# /data   = addon private data (only visible inside this container)
-NANOBOT_HOME="/config/nanobot"
+# Read paths from HA options (new simple format)
+NANOBOT_HOME=$(jq -r '.CONFIG_PATH // "/config/nanobot"' /data/options.json 2>/dev/null)
+DATA_DIR=$(jq -r '.DATA_PATH // "/data/nanobot"' /data/options.json 2>/dev/null)
+
 NANOBOT_BIN="/opt/nanobot-venv/bin/nanobot"
 PYTHON="/opt/nanobot-venv/bin/python3"
 CONFIG_FILE="${NANOBOT_HOME}/config.json"
@@ -26,7 +30,6 @@ cleanup() {
     echo "[INFO] Shutting down..."
     [ -n "${WEB_PID}" ] && kill "${WEB_PID}" 2>/dev/null
     [ -n "${GW_LOOP_PID}" ] && kill "${GW_LOOP_PID}" 2>/dev/null
-    # Kill any nanobot gateway processes
     pkill -f "nanobot gateway" 2>/dev/null
     wait 2>/dev/null
     exit 0
@@ -44,11 +47,11 @@ if [ -d "/data/nanobot" ] && [ ! -L "/data/nanobot" ]; then
     echo "[INFO] Migration complete."
 fi
 
-# --- Generate / merge config from HA options ---
-echo "[INFO] Generating config..."
+# --- Bootstrap config (only if missing) ---
+echo "[INFO] Checking config..."
 ${PYTHON} /generate_config.py
 
-# Debug: show generated config (without secrets)
+# Debug: show config summary (without secrets)
 echo "[INFO] Config keys: $(jq -r 'keys | join(", ")' "${CONFIG_FILE}" 2>/dev/null)"
 echo "[INFO] MCP servers: $(jq -r '.tools.mcpServers | keys | join(", ") // "none"' "${CONFIG_FILE}" 2>/dev/null)"
 echo "[INFO] Channels: $(jq -r '.channels | keys | join(", ") // "none"' "${CONFIG_FILE}" 2>/dev/null)"
@@ -56,25 +59,22 @@ echo "[INFO] Channels: $(jq -r '.channels | keys | join(", ") // "none"' "${CONF
 # Symlink for nanobot CLI which reads from ~/.nanobot/config.json
 ln -sf "${CONFIG_FILE}" "/data/.nanobot/config.json" 2>/dev/null || true
 
-# --- HA config access (optional, enabled in Advanced settings) ---
-HA_CONFIG_ACCESS=$(jq -r '.advanced.ha_config_access // false' /data/options.json 2>/dev/null)
+# --- HA config access (from options) ---
+HA_CONFIG_ACCESS=$(jq -r '.ha_config_access // false' /data/options.json 2>/dev/null)
 if [ "${HA_CONFIG_ACCESS}" = "true" ] && [ -d "/homeassistant" ]; then
     ln -sfn /homeassistant "${NANOBOT_HOME}/workspace/ha-config"
     echo "[INFO] HA config access ENABLED: workspace/ha-config -> /homeassistant/"
-    # Disable workspace restriction so bot can access HA files
     jq '.tools.restrictToWorkspace = false' "${CONFIG_FILE}" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "${CONFIG_FILE}"
-    # Export Supervisor API token
     if [ -n "${SUPERVISOR_TOKEN}" ]; then
         export SUPERVISOR_TOKEN
         echo "[INFO] Supervisor API token available"
     fi
 else
-    # Remove stale symlink if feature was disabled
     rm -f "${NANOBOT_HOME}/workspace/ha-config" 2>/dev/null
 fi
 
-# --- Timezone (from HA options) ---
-TIMEZONE=$(jq -r '.advanced.timezone // "Europe/Kiev"' /data/options.json 2>/dev/null)
+# --- Timezone (from options) ---
+TIMEZONE=$(jq -r '.timezone // "Europe/Kiev"' /data/options.json 2>/dev/null)
 if [ -f "/usr/share/zoneinfo/${TIMEZONE}" ]; then
     ln -sf "/usr/share/zoneinfo/${TIMEZONE}" /etc/localtime
     echo "${TIMEZONE}" > /etc/timezone
@@ -86,13 +86,13 @@ API_KEY=$(jq -r '.providers | to_entries[0].value.apiKey // empty' "${CONFIG_FIL
 if [ -z "${API_KEY}" ]; then
     echo "=============================================="
     echo "[WARN] No LLM API key configured!"
-    echo "[WARN] Set your API key in Settings -> Add-ons -> Nanobot Assistant -> Configuration"
+    echo "[WARN] Edit ${CONFIG_FILE} to add your API key."
     echo "=============================================="
 fi
 
 # --- Banner ---
 echo "=============================================="
-echo " Nanobot Assistant v0.1.27"
+echo " Nanobot Assistant v0.1.28"
 echo " Config:   ${NANOBOT_HOME}/"
 echo " Web UI:   http://0.0.0.0:8080  (HA Ingress)"
 echo " Gateway:  http://0.0.0.0:18790"
@@ -125,7 +125,7 @@ gateway_loop() {
             sleep ${RETRY_DELAY}
         else
             echo "[ERROR] Gateway failed ${MAX_RETRIES} times. Giving up."
-            echo "[ERROR] Check your MCP/Telegram settings or view logs for details."
+            echo "[ERROR] Check config.json or view logs for details."
         fi
     done
 }
@@ -136,11 +136,10 @@ if [ -n "${API_KEY}" ]; then
     GW_LOOP_PID=$!
     echo "[INFO] Gateway loop started (PID: ${GW_LOOP_PID})"
 else
-    echo "[INFO] Gateway NOT started (no API key). Configure in HA Settings."
+    echo "[INFO] Gateway NOT started (no API key). Edit config.json."
 fi
 
 # --- Keep alive: wait for Web UI ---
-# Web UI keeps the addon running even if gateway crashes
 wait "${WEB_PID}" 2>/dev/null
 echo "[WARN] Web UI exited."
 cleanup
