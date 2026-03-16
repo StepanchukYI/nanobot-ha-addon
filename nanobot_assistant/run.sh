@@ -3,8 +3,9 @@
 # Nanobot Assistant — Home Assistant Add-on entry point
 # Manages: Web UI (port 8080) + Nanobot Gateway (port 18790)
 #
-# v0.1.28: config.json is managed externally (Ansible/File Editor).
-# Options only define CONFIG_PATH, DATA_PATH, timezone, ha_config_access.
+# v0.1.29: config.json is a template with ${SECRET} placeholders.
+# Secrets are set in HA addon options. generate_config.py resolves
+# placeholders → config.runtime.json (used by nanobot).
 # ============================================================
 
 # Read paths from HA options (new simple format)
@@ -13,7 +14,10 @@ DATA_DIR=$(jq -r '.DATA_PATH // "/data/nanobot"' /data/options.json 2>/dev/null)
 
 NANOBOT_BIN="/opt/nanobot-venv/bin/nanobot"
 PYTHON="/opt/nanobot-venv/bin/python3"
-CONFIG_FILE="${NANOBOT_HOME}/config.json"
+# config.json = template (with ${SECRET} placeholders, safe for git)
+# config.runtime.json = resolved (with actual secrets, used by nanobot)
+CONFIG_TEMPLATE="${NANOBOT_HOME}/config.json"
+CONFIG_FILE="${NANOBOT_HOME}/config.runtime.json"
 LOG_FILE="${NANOBOT_HOME}/gateway.log"
 MAX_RETRIES=5
 RETRY_DELAY=15
@@ -86,13 +90,13 @@ API_KEY=$(jq -r '.providers | to_entries[0].value.apiKey // empty' "${CONFIG_FIL
 if [ -z "${API_KEY}" ]; then
     echo "=============================================="
     echo "[WARN] No LLM API key configured!"
-    echo "[WARN] Edit ${CONFIG_FILE} to add your API key."
+    echo "[WARN] Add API key to config.json or set it in addon secrets."
     echo "=============================================="
 fi
 
 # --- Banner ---
 echo "=============================================="
-echo " Nanobot Assistant v0.1.28"
+echo " Nanobot Assistant v0.1.29"
 echo " Config:   ${NANOBOT_HOME}/"
 echo " Web UI:   http://0.0.0.0:8080  (HA Ingress)"
 echo " Gateway:  http://0.0.0.0:18790"

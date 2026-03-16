@@ -21,6 +21,29 @@ All actual configuration lives in `config.json`.
 | `DATA_PATH` | Path to nanobot data directory (default: `/data/nanobot`) |
 | `ha_config_access` | Allow bot to read/edit HA config files |
 | `timezone` | Timezone (e.g. `Europe/Kiev`) |
+| `secrets` | List of key-value pairs for secret substitution (see below) |
+
+## Secrets
+
+Secrets allow you to keep API keys and tokens out of config.json.
+Add secrets in **Settings → Add-ons → Nanobot → Configuration → secrets**:
+
+| Name | Value |
+|------|-------|
+| `ZHIPU_API_KEY` | `fd40870a...` |
+| `TELEGRAM_TOKEN` | `77277567...` |
+| `HA_MCP_TOKEN` | `eyJhbG...` |
+| `GROQ_API_KEY` | `gsk_...` |
+
+Then use `${SECRET_NAME}` placeholders in config.json:
+
+```json
+"apiKey": "${ZHIPU_API_KEY}",
+"token": "${TELEGRAM_TOKEN}"
+```
+
+On every restart, the addon resolves placeholders → `config.runtime.json` (used by nanobot).
+The template `config.json` keeps placeholders — safe for git, Ansible, sharing.
 
 ## Configuration (config.json)
 
@@ -28,7 +51,7 @@ All settings are in `/config/nanobot/config.json`. Edit it with File Editor,
 VS Code Server addon, or deploy via Ansible.
 
 **On first install**, a default config.json is created automatically.
-**On restart**, the addon NEVER overwrites your config.json.
+**On restart**, the addon resolves `${SECRET}` placeholders but NEVER changes your config.json structure.
 
 ### Example config.json
 

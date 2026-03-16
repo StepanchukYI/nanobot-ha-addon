@@ -1,6 +1,6 @@
 name: "Nanobot — AI Assistant for Raspberry Pi"
 description: "Ultra-lightweight AI assistant (~100 MB RAM) built for Raspberry Pi and low-power devices. Multi-provider LLM support (Zhipu, OpenRouter, OpenAI, Anthropic, DeepSeek, Gemini, Ollama). MCP tools, Telegram bot, Exchange calendar, scheduled tasks."
-version: "0.1.28"
+version: "0.1.29"
 slug: "nanobot_assistant"
 url: "https://github.com/HKUDS/nanobot"
 arch:
@@ -26,11 +26,15 @@ options:
   DATA_PATH: "/data/nanobot"
   ha_config_access: false
   timezone: "Europe/Kiev"
+  secrets: []
 schema:
   CONFIG_PATH: "str"
   DATA_PATH: "str"
   ha_config_access: "bool"
   timezone: "str?"
+  secrets:
+    - name: "str"
+      value: "password"
 panel_icon: "mdi:robot-happy"
 panel_title: "Nanobot"
 ingress: true

@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
-"""Bootstrap nanobot config.json if it doesn't exist.
+"""Bootstrap nanobot config.json and inject secrets.
 
-Since v0.1.28, addon options only define paths (CONFIG_PATH, DATA_PATH).
-All actual configuration lives in config.json, managed externally
-(Ansible, File Editor, Web UI, or manually via SSH).
+Since v0.1.28, addon options only define paths (CONFIG_PATH, DATA_PATH)
+and secrets (key-value pairs). All actual configuration lives in
+config.json, managed externally (Ansible, File Editor, or SSH).
 
 This script:
 - Creates a default config.json ONLY if none exists (first install)
+- Substitutes ${SECRET_NAME} placeholders in config.json with values from HA secrets
 - Migrates old-format HA options (llm, telegram, etc.) into config.json (one-time)
-- NEVER overwrites an existing config.json
+- Writes resolved config to a runtime copy (secrets never stored in the template)
 """
 
 import json
 import os
+import re
 
 OPTIONS_FILE = "/data/options.json"
 
@@ -187,12 +189,36 @@ def migrate_agents_to_profiles(config):
     agents.get("defaults", {}).pop("systemPrompt", None)
 
 
+def load_secrets(opts):
+    """Load secrets from HA addon options as a dict."""
+    secrets = {}
+    for entry in opts.get("secrets", []):
+        name = entry.get("name", "").strip()
+        value = entry.get("value", "").strip()
+        if name and value:
+            secrets[name] = value
+    return secrets
+
+
+def substitute_secrets(config_str, secrets):
+    """Replace ${SECRET_NAME} placeholders in a JSON string with secret values."""
+    def replace_match(match):
+        key = match.group(1)
+        if key in secrets:
+            return secrets[key]
+        print(f"[WARN] Secret '{key}' referenced in config but not defined in addon secrets")
+        return match.group(0)  # keep placeholder if secret not found
+
+    return re.sub(r'\$\{([A-Za-z_][A-Za-z0-9_]*)\}', replace_match, config_str)
+
+
 def main():
     os.environ["HOME"] = "/data"
 
     opts = load_options()
     nanobot_home = opts.get("CONFIG_PATH", "/config/nanobot")
     config_file = os.path.join(nanobot_home, "config.json")
+    runtime_file = os.path.join(nanobot_home, "config.runtime.json")
 
     # Create directories
     os.makedirs(nanobot_home, exist_ok=True)
@@ -229,9 +255,29 @@ def main():
         with open(config_file, "w") as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
         print(f"[INFO] Default config created at {config_file}")
-        print("[INFO] Edit config.json to add LLM keys, MCP servers, Telegram, etc.")
+        print("[INFO] Edit config.json to add LLM keys, MCP servers, etc.")
+        print("[INFO] Use ${SECRET_NAME} placeholders for sensitive values.")
 
-    print(f"[INFO] Config path: {config_file}")
+    # --- Substitute secrets into runtime config ---
+    secrets = load_secrets(opts)
+
+    with open(config_file, "r") as f:
+        config_str = f.read()
+
+    if secrets:
+        resolved_str = substitute_secrets(config_str, secrets)
+        count = len(secrets)
+        placeholders_found = len(re.findall(r'\$\{[A-Za-z_][A-Za-z0-9_]*\}', config_str))
+        print(f"[INFO] Secrets: {count} defined, {placeholders_found} placeholders in config")
+    else:
+        resolved_str = config_str
+
+    # Write runtime config (with secrets resolved)
+    with open(runtime_file, "w") as f:
+        f.write(resolved_str)
+
+    print(f"[INFO] Config template: {config_file}")
+    print(f"[INFO] Runtime config:  {runtime_file}")
 
 
 if __name__ == "__main__":
