@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.2.0 (2026-05-20)
+
+### Changed
+
+- Switch nanobot source from custom fork `StepanchukYI/nanobot@dev` to upstream PyPI `nanobot-ai==0.2.0`. Fork is archived.
+- Drop fork-only features no longer used: named agent profiles (`agents.profiles`), custom slash commands, vision-cache preprocessor, event-webhook trigger, telegram emoji reactions.
+- Replace the addon's custom Web UI (Python `BaseHTTPRequestHandler` server on port 8080) with the upstream WebUI bundled inside `nanobot-ai`, served by the `websocket` channel on `127.0.0.1:8765`. Provides chat, redesigned Settings/BYOK, sessions, MCP/cron management, image generation.
+- HA Ingress now points at port 8765 (was 8080). Direct port 8080 mapping is removed.
+- Healthcheck targets `http://127.0.0.1:8765/`; `start-period` raised to 90s to accommodate gateway init.
+- Default config enables the websocket channel (host `127.0.0.1`, port `8765`, no token — only HA Ingress on the same host can reach it).
+
+### Removed
+
+- `nanobot_assistant/webui.py` — custom Web UI (Configuration / Agents / MCP Servers / Logs tabs) replaced by upstream bundled UI.
+- `agents.profiles` field is stripped from existing `config.json` on first run after upgrade.
+- Port 8080 mapping (no longer used).
+
+### Migrated
+
+- `agents.defaults.memoryWindow` → `agents.defaults.maxMessages` (upstream renamed the field). Existing configs auto-migrate.
+
+### Notes
+
+- Upstream v0.2.0 brings `/goal` + `long_task`, WebUI bundled in the wheel, settings/BYOK redesign, 5 new providers (Bedrock, NVIDIA NIM, LongCat, Atomic Chat, MiMo), `fallback_models`, and four security fixes (SSRF, media path confinement, workspace boundaries). See [HKUDS/nanobot v0.2.0 release notes](https://github.com/HKUDS/nanobot/releases/tag/v0.2.0).
+- Logs/MCP/cron are now manageable from the upstream Web UI; `config.json` remains the source of truth on disk.
+
 ## 0.1.30 (2026-03-16)
 
 ### Added

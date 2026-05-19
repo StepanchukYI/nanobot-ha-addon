@@ -1,6 +1,6 @@
 name: "Nanobot — AI Assistant for Raspberry Pi"
 description: "Ultra-lightweight AI assistant (~100 MB RAM) built for Raspberry Pi and low-power devices. Multi-provider LLM support (Zhipu, OpenRouter, OpenAI, Anthropic, DeepSeek, Gemini, Ollama). MCP tools, Telegram bot, Exchange calendar, scheduled tasks."
-version: "0.1.30"
+version: "0.2.0"
 slug: "nanobot_assistant"
 url: "https://github.com/HKUDS/nanobot"
 arch:
@@ -17,10 +17,8 @@ map:
   - ssl:ro
 ports:
   18790/tcp: 18790
-  8080/tcp: 8080
 ports_description:
-  18790/tcp: "Nanobot Gateway"
-  8080/tcp: "Web UI (chat, settings, logs)"
+  18790/tcp: "Nanobot Gateway (health/MCP)"
 options:
   CONFIG_PATH: "/config/nanobot"
   DATA_PATH: "/data/nanobot"
@@ -38,5 +36,5 @@ schema:
 panel_icon: "mdi:robot-happy"
 panel_title: "Nanobot"
 ingress: true
-ingress_port: 8080
+ingress_port: 8765
 ingress_stream: true

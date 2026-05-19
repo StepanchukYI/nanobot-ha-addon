@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # ============================================================
 # Nanobot Assistant — Home Assistant Add-on entry point
-# Manages: Web UI (port 8080) + Nanobot Gateway (port 18790)
+# Runs upstream nanobot gateway. WebUI is bundled into the
+# wheel and served by the websocket channel on 127.0.0.1:8765;
+# HA Ingress proxies it to the addon panel.
 #
-# v0.1.29: config.json is a template with ${SECRET} placeholders.
-# Secrets are set in HA addon options. generate_config.py resolves
-# placeholders → config.runtime.json (used by nanobot).
+# config.json is a template with ${SECRET} placeholders.
+# Secrets are set in HA addon options. generate_config.py
+# resolves placeholders → config.runtime.json (used by nanobot).
 # ============================================================
 
 # Read paths from HA options (new simple format)
@@ -25,14 +27,12 @@ RETRY_DELAY=15
 export HOME="/data"
 export NANOBOT_HOME
 
-WEB_PID=""
 GW_LOOP_PID=""
 STOPPING=false
 
 cleanup() {
     STOPPING=true
     echo "[INFO] Shutting down..."
-    [ -n "${WEB_PID}" ] && kill "${WEB_PID}" 2>/dev/null
     [ -n "${GW_LOOP_PID}" ] && kill "${GW_LOOP_PID}" 2>/dev/null
     pkill -f "nanobot gateway" 2>/dev/null
     wait 2>/dev/null
@@ -90,25 +90,19 @@ API_KEY=$(jq -r '.providers | to_entries[0].value.apiKey // empty' "${CONFIG_FIL
 if [ -z "${API_KEY}" ]; then
     echo "=============================================="
     echo "[WARN] No LLM API key configured!"
-    echo "[WARN] Add API key to config.json or set it in addon secrets."
+    echo "[WARN] Open the Web UI → Settings to add one, or edit config.json."
     echo "=============================================="
 fi
 
 # --- Banner ---
 echo "=============================================="
-echo " Nanobot Assistant v0.1.29"
+echo " Nanobot Assistant v0.2.0"
 echo " Config:   ${NANOBOT_HOME}/"
-echo " Web UI:   http://0.0.0.0:8080  (HA Ingress)"
+echo " Web UI:   http://127.0.0.1:8765/  (served via HA Ingress)"
 echo " Gateway:  http://0.0.0.0:18790"
 echo " Provider: $(jq -r '.providers | keys[0] // "none"' "${CONFIG_FILE}" 2>/dev/null)"
 echo " Model:    $(jq -r '.agents.defaults.model // "unknown"' "${CONFIG_FILE}" 2>/dev/null)"
 echo "=============================================="
-
-# --- Start Web UI ---
-echo "[INFO] Starting Web UI server..."
-${PYTHON} /webui.py 2>&1 &
-WEB_PID=$!
-echo "[INFO] Web UI started (PID: ${WEB_PID})"
 
 # --- Gateway restart loop ---
 gateway_loop() {
@@ -116,7 +110,7 @@ gateway_loop() {
     while [ "${STOPPING}" = "false" ] && [ ${retries} -lt ${MAX_RETRIES} ]; do
         echo "[INFO] Starting Nanobot Gateway (attempt $((retries + 1))/${MAX_RETRIES})..."
         cd "${NANOBOT_HOME}"
-        ${NANOBOT_BIN} gateway 2>&1 | tee -a "${LOG_FILE}"
+        ${NANOBOT_BIN} gateway -c "${CONFIG_FILE}" 2>&1 | tee -a "${LOG_FILE}"
         EXIT_CODE=$?
 
         if [ "${STOPPING}" = "true" ]; then
@@ -134,16 +128,6 @@ gateway_loop() {
     done
 }
 
-# --- Start Nanobot Gateway ---
-if [ -n "${API_KEY}" ]; then
-    gateway_loop &
-    GW_LOOP_PID=$!
-    echo "[INFO] Gateway loop started (PID: ${GW_LOOP_PID})"
-else
-    echo "[INFO] Gateway NOT started (no API key). Edit config.json."
-fi
-
-# --- Keep alive: wait for Web UI ---
-wait "${WEB_PID}" 2>/dev/null
-echo "[WARN] Web UI exited."
+# --- Start Nanobot Gateway (foreground) ---
+gateway_loop
 cleanup

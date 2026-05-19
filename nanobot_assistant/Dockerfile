@@ -15,10 +15,10 @@ RUN apk add --no-cache \
 # Create virtual environment for clean dependency management
 RUN python3 -m venv /opt/nanobot-venv
 
-# Install nanobot from custom fork branch + mcp-proxy
+# Install nanobot from upstream PyPI + mcp-proxy
 RUN /opt/nanobot-venv/bin/pip install --no-cache-dir --upgrade pip && \
     /opt/nanobot-venv/bin/pip install --no-cache-dir \
-        "git+https://github.com/StepanchukYI/nanobot.git@dev" \
+        "nanobot-ai==0.2.0" \
         "mcp-proxy>=0.3.0"
 
 # Clone EWS MCP server (pip entry point is broken, must run from source)
@@ -35,11 +35,11 @@ RUN mkdir -p /data/nanobot /data/nanobot/workspace /data/nanobot/skills /data/.n
 # Copy addon scripts
 COPY run.sh /
 COPY generate_config.py /
-COPY webui.py /
 RUN chmod a+x /run.sh
 
-# Healthcheck: check Web UI (always running), not gateway (slow to start)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -sf http://localhost:8080/ || exit 1
+# Healthcheck: the bundled WebUI (served by nanobot's websocket channel) on 8765.
+# start-period 90s — gateway init (git store, tools, cron, dream) takes ~10–20s.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
+    CMD curl -sf http://127.0.0.1:8765/ || exit 1
 
 CMD [ "/run.sh" ]

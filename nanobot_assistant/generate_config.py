@@ -57,11 +57,17 @@ def create_default_config(nanobot_home):
                 "maxTokens": 8192,
                 "temperature": 0.7,
                 "maxToolIterations": 20,
-                "memoryWindow": 50,
+                "maxMessages": 50,
             },
-            "profiles": {},
         },
-        "channels": {},
+        "channels": {
+            "websocket": {
+                "enabled": True,
+                "host": "127.0.0.1",
+                "port": 8765,
+                "websocketRequiresToken": False,
+            },
+        },
         "tools": {
             "exec": {"timeout": 60},
             "restrictToWorkspace": True,
@@ -165,28 +171,26 @@ def migrate_old_options(opts, config, nanobot_home):
     print("[INFO] Migration complete.")
 
 
-def migrate_agents_to_profiles(config):
-    """Migrate old-format named agents to agents.profiles."""
+def strip_legacy_profiles(config):
+    """Migrate addon configs from fork v0.1.x to upstream v0.2.0 schema.
+
+    - Remove agents.profiles (fork-only — upstream v0.2.0 has no profiles).
+    - Rename agents.defaults.memoryWindow → maxMessages (upstream renamed the field).
+    - Drop legacy agents.defaults.systemPrompt (moved to workspace/IDENTITY.md).
+    """
     agents = config.get("agents", {})
-    profiles = agents.setdefault("profiles", {})
-    defaults_keys = {"defaults", "profiles"}
+    if "profiles" in agents:
+        removed = agents.pop("profiles")
+        if removed:
+            print(f"[INFO] Removed legacy agents.profiles ({len(removed)} entries) — upstream v0.2.0 has no profiles")
 
-    for key in list(agents.keys()):
-        if key in defaults_keys:
-            continue
-        old_agent = agents.pop(key)
-        profile_entry = {}
-        sp = old_agent.get("systemPrompt") or old_agent.get("system_prompt")
-        if sp:
-            profile_entry["systemPrompt"] = sp
-        model = old_agent.get("model")
-        if model:
-            profile_entry["model"] = model
-        if profile_entry and key not in profiles:
-            profiles[key] = profile_entry
-            print(f"[INFO] Migrated agent '{key}' → agents.profiles.{key}")
-
-    agents.get("defaults", {}).pop("systemPrompt", None)
+    defaults = agents.get("defaults", {})
+    if "memoryWindow" in defaults and "maxMessages" not in defaults:
+        defaults["maxMessages"] = defaults.pop("memoryWindow")
+        print(f"[INFO] Renamed agents.defaults.memoryWindow → maxMessages ({defaults['maxMessages']})")
+    elif "memoryWindow" in defaults:
+        defaults.pop("memoryWindow")
+    defaults.pop("systemPrompt", None)
 
 
 def load_secrets(opts):
@@ -234,7 +238,7 @@ def main():
                 with open(config_file, "r") as f:
                     config = json.load(f)
                 migrate_old_options(opts, config, nanobot_home)
-                migrate_agents_to_profiles(config)
+                strip_legacy_profiles(config)
                 config.pop("timezone", None)
                 with open(config_file, "w") as f:
                     json.dump(config, f, indent=2, ensure_ascii=False)
@@ -249,7 +253,7 @@ def main():
         if is_old_options_format(opts):
             migrate_old_options(opts, config, nanobot_home)
 
-        migrate_agents_to_profiles(config)
+        strip_legacy_profiles(config)
         config.pop("timezone", None)
 
         with open(config_file, "w") as f:
