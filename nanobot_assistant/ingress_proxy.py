@@ -32,6 +32,7 @@ import asyncio
 import ipaddress
 import logging
 import os
+import re
 import secrets
 from typing import Iterable
 
@@ -135,6 +136,50 @@ def _needs_secret_injection(path: str) -> bool:
     return any(path == p or path.startswith(p + "?") for p in SECRET_AUTH_PATHS)
 
 
+# Absolute-path prefixes the SPA bakes into its HTML/JS that must be rewritten
+# back through the Ingress URL. Only `="/<dir>/...` and `='/<dir>/...` forms
+# are touched; plain `/` inside text content is left alone.
+_HTML_ABS_PATH_PREFIXES = ("assets", "brand", "api", "webui")
+
+# Single regex, single pass — avoids the cascading-replacement bug where
+# replacing `/assets/` first injects a `/api/` substring that the next pass
+# would then rewrite again.
+_ABS_PATH_RE = re.compile(
+    rb'(?P<q>["\'])/(?P<dir>' + b"|".join(d.encode() for d in _HTML_ABS_PATH_PREFIXES) + rb')/'
+)
+
+
+def _rewrite_html_paths(html: bytes, ingress_prefix: str) -> bytes:
+    """Rewrite absolute paths in the SPA shell so they hit the Ingress URL.
+
+    Two changes:
+      1. Inject a `<base href="{ingress_prefix}/">` right after `<head>` so
+         relative URLs and JS that uses `document.baseURI` pick up the prefix.
+      2. Replace the well-known absolute path prefixes (`/assets/`, `/brand/`,
+         `/api/`, `/webui/`) inside `="..."` and `='...'` attributes with
+         `{ingress_prefix}/...`. `<base href>` alone is not enough because
+         browsers resolve absolute paths against the origin, not the base.
+    """
+    prefix = ingress_prefix.rstrip("/").encode("utf-8")
+    if not prefix:
+        return html
+
+    # 1. Rewrite all `="/<dir>/...` and `='/<dir>/...` in one pass.
+    def _sub(m: re.Match) -> bytes:
+        return m.group("q") + prefix + b"/" + m.group("dir") + b"/"
+
+    html = _ABS_PATH_RE.sub(_sub, html)
+
+    # 2. Inject <base> AFTER the path-rewrite pass so the regex above doesn't
+    # itself match the `/api/...` URL we just injected. Idempotent: skip if
+    # the upstream already emitted a <base>.
+    if b"<base " not in html:
+        base_tag = b'<head><base href="' + prefix + b'/">'
+        html = html.replace(b"<head>", base_tag, 1)
+
+    return html
+
+
 # --- HTTP proxy ------------------------------------------------------------
 
 async def _proxy_http(request: web.Request, secret: str) -> web.StreamResponse:
@@ -150,6 +195,7 @@ async def _proxy_http(request: web.Request, secret: str) -> web.StreamResponse:
         fwd_headers.append(("Authorization", f"Bearer {secret}"))
 
     body = await request.read() if request.body_exists else None
+    ingress_prefix = request.headers.get("X-Ingress-Path", "").strip()
 
     async with client.request(
         request.method,
@@ -159,6 +205,30 @@ async def _proxy_http(request: web.Request, secret: str) -> web.StreamResponse:
         allow_redirects=False,
         timeout=ClientTimeout(total=120),
     ) as upstream:
+        upstream_ct = upstream.headers.get("Content-Type", "")
+        is_html = upstream_ct.lower().startswith("text/html") and ingress_prefix
+
+        if is_html:
+            # Buffer the full HTML to rewrite paths; re-emit with new
+            # Content-Length and without the upstream's compressed-encoding
+            # (aiohttp transparently decompresses, so we send plain bytes).
+            raw = await upstream.read()
+            patched = _rewrite_html_paths(raw, ingress_prefix)
+            out_headers = []
+            for k, v in _filter_headers(upstream.headers.items()):
+                lk = k.lower()
+                if lk in ("content-length", "content-encoding"):
+                    continue
+                out_headers.append((k, v))
+            out_headers.append(("Content-Length", str(len(patched))))
+            response = web.Response(
+                body=patched,
+                status=upstream.status,
+                reason=upstream.reason,
+                headers=dict(out_headers),
+            )
+            return response
+
         response = web.StreamResponse(
             status=upstream.status,
             reason=upstream.reason,

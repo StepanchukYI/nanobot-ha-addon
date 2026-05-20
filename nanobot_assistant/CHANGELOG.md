@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.2 (2026-05-20)
+
+### Fixed
+
+- WebUI loaded the HTML shell but every asset hit `https://<ha>/assets/...` (no Ingress prefix) and got back 404 / `text/plain`. The bundled SPA bakes `/assets/...`, `/brand/...`, `/api/...`, `/webui/...` as absolute paths, which the browser resolves against the HA host root instead of the Ingress URL. Symptom: blank page, console errors about MIME type and 404s on `index-*.js` / `index-*.css`.
+
+### Added
+
+- `ingress_proxy.py` now rewrites HTML responses on the fly: it injects `<base href="{X-Ingress-Path}/">` right after `<head>`, and replaces every `="/<dir>/...` / `='/<dir>/...` (for the dirs `assets`, `brand`, `api`, `webui`) with the Ingress-prefixed form. Done in one regex pass to avoid cascading double-prefix bugs. Only `text/html` responses are touched, only when an `X-Ingress-Path` header is present.
+
 ## 0.2.1 (2026-05-20)
 
 ### Fixed
