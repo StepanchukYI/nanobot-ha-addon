@@ -35,14 +35,11 @@ RUN mkdir -p /data/nanobot /data/nanobot/workspace /data/nanobot/skills /data/.n
 # Copy addon scripts
 COPY run.sh /
 COPY generate_config.py /
-COPY ingress_proxy.py /
 RUN chmod a+x /run.sh
 
-# Healthcheck: nanobot's websocket channel on 127.0.0.1:8765 (the upstream WebUI).
-# The ingress proxy sits in front on 0.0.0.0:8099, but if nanobot itself is up
-# the proxy will follow; the gateway is the slow part to boot.
+# Healthcheck: nanobot's gateway health endpoint.
 # start-period 90s — gateway init (git store, tools, cron, dream) takes ~10–20s.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
-    CMD curl -sf http://127.0.0.1:8765/ || exit 1
+    CMD curl -sf http://127.0.0.1:18790/health || exit 1
 
 CMD [ "/run.sh" ]

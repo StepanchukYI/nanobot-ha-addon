@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.0 (2026-05-20)
+
+### Removed
+
+- HA Ingress integration and the entire ingress-proxy stack. The upstream WebUI hard-codes absolute paths (`/assets/`, `/brand/`, `${e}/api/`, `${e}/webui/bootstrap`, plus a `WebSocket(${host}/${ws_path})` constructor that ignores any base path), and gating the bundled bundle behind HA Ingress required a growing pile of regex rewriters in the proxy. Each rewrite plugged one hole; the next one always showed up. Not worth the maintenance.
+- `nanobot_assistant/ingress_proxy.py` deleted.
+- `panel_icon` / `panel_title` / `ingress` / `ingress_port` / `ingress_stream` removed from `config.yaml`.
+- `channels.websocket` removed from the default config and the ansible template. The addon runs headless now.
+
+### Kept
+
+- Telegram channel (proven working — `your_homeassistant_bot connected`).
+- All MCP servers (Home Assistant, Notion, MiniMax).
+- Cron + dream + heartbeat.
+- Gateway on `0.0.0.0:18790` for `/health` and MCP traffic.
+
+### Notes
+
+- If a WebUI is wanted later, the clean path is a subdomain via NPM (`nanobot.example.com` → Pi:8765), not HA Ingress. Upstream WebUI works as-is when served from the URL root.
+
 ## 0.2.3 (2026-05-20)
 
 ### Fixed
