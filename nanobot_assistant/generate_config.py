@@ -15,8 +15,10 @@ This script:
 import json
 import os
 import re
+import secrets
 
 OPTIONS_FILE = "/data/options.json"
+PROXY_SECRET_FILE = "/data/.nanobot/proxy_secret"
 
 PROVIDER_BASES = {
     "zhipu":      "https://open.bigmodel.cn/api/coding/paas/v4",
@@ -171,6 +173,49 @@ def migrate_old_options(opts, config, nanobot_home):
     print("[INFO] Migration complete.")
 
 
+def load_or_generate_proxy_secret():
+    """Return the shared secret used by ingress_proxy.py to talk to nanobot.
+
+    The same value is injected into channels.websocket.token_issue_secret in
+    the runtime config so nanobot accepts the proxy's Authorization header on
+    /webui/bootstrap. The file is persisted under /data so the value survives
+    restarts; it's regenerated only if missing or empty.
+    """
+    if os.path.exists(PROXY_SECRET_FILE):
+        try:
+            with open(PROXY_SECRET_FILE, "r") as f:
+                value = f.read().strip()
+            if value:
+                return value
+        except OSError:
+            pass
+    value = secrets.token_urlsafe(32)
+    os.makedirs(os.path.dirname(PROXY_SECRET_FILE), exist_ok=True)
+    with open(PROXY_SECRET_FILE, "w") as f:
+        f.write(value)
+    try:
+        os.chmod(PROXY_SECRET_FILE, 0o600)
+    except OSError:
+        pass
+    return value
+
+
+def inject_websocket_proxy_secret(config, secret):
+    """Force channels.websocket.tokenIssueSecret to the shared proxy secret.
+
+    nanobot uses this value to gate /webui/bootstrap. The websocket section
+    is also pinned to 127.0.0.1 so nothing on the LAN can reach nanobot
+    directly — only the ingress proxy (which holds the same secret) can.
+    """
+    channels = config.setdefault("channels", {})
+    ws = channels.setdefault("websocket", {})
+    ws["enabled"] = True
+    ws["host"] = "127.0.0.1"
+    ws.setdefault("port", 8765)
+    ws["tokenIssueSecret"] = secret
+    ws["websocketRequiresToken"] = False
+
+
 def strip_legacy_profiles(config):
     """Migrate addon configs from fork v0.1.x to upstream v0.2.0 schema.
 
@@ -263,18 +308,29 @@ def main():
         print("[INFO] Use ${SECRET_NAME} placeholders for sensitive values.")
 
     # --- Substitute secrets into runtime config ---
-    secrets = load_secrets(opts)
+    addon_secrets = load_secrets(opts)
 
     with open(config_file, "r") as f:
         config_str = f.read()
 
-    if secrets:
-        resolved_str = substitute_secrets(config_str, secrets)
-        count = len(secrets)
+    if addon_secrets:
+        resolved_str = substitute_secrets(config_str, addon_secrets)
+        count = len(addon_secrets)
         placeholders_found = len(re.findall(r'\$\{[A-Za-z_][A-Za-z0-9_]*\}', config_str))
         print(f"[INFO] Secrets: {count} defined, {placeholders_found} placeholders in config")
     else:
         resolved_str = config_str
+
+    # --- Pin websocket channel to 127.0.0.1 + inject ingress proxy secret ---
+    # Done on the runtime copy only; the template stays free of generated secrets.
+    proxy_secret = load_or_generate_proxy_secret()
+    try:
+        runtime_config = json.loads(resolved_str)
+        inject_websocket_proxy_secret(runtime_config, proxy_secret)
+        resolved_str = json.dumps(runtime_config, indent=2, ensure_ascii=False)
+        print("[INFO] Websocket channel pinned to 127.0.0.1; ingress proxy secret injected")
+    except json.JSONDecodeError as e:
+        print(f"[ERROR] Could not parse resolved config to inject proxy secret: {e}")
 
     # Write runtime config (with secrets resolved)
     with open(runtime_file, "w") as f:

@@ -28,13 +28,16 @@ export HOME="/data"
 export NANOBOT_HOME
 
 GW_LOOP_PID=""
+PROXY_PID=""
 STOPPING=false
 
 cleanup() {
     STOPPING=true
     echo "[INFO] Shutting down..."
+    [ -n "${PROXY_PID}" ] && kill "${PROXY_PID}" 2>/dev/null
     [ -n "${GW_LOOP_PID}" ] && kill "${GW_LOOP_PID}" 2>/dev/null
     pkill -f "nanobot gateway" 2>/dev/null
+    pkill -f "ingress_proxy.py" 2>/dev/null
     wait 2>/dev/null
     exit 0
 }
@@ -97,12 +100,19 @@ fi
 # --- Banner ---
 echo "=============================================="
 echo " Nanobot Assistant v0.2.0"
-echo " Config:   ${NANOBOT_HOME}/"
-echo " Web UI:   http://127.0.0.1:8765/  (served via HA Ingress)"
-echo " Gateway:  http://0.0.0.0:18790"
-echo " Provider: $(jq -r '.providers | keys[0] // "none"' "${CONFIG_FILE}" 2>/dev/null)"
-echo " Model:    $(jq -r '.agents.defaults.model // "unknown"' "${CONFIG_FILE}" 2>/dev/null)"
+echo " Config:        ${NANOBOT_HOME}/"
+echo " Nanobot WebUI: http://127.0.0.1:8765/  (loopback only)"
+echo " Ingress proxy: http://0.0.0.0:8099/    (HA Ingress entry point)"
+echo " Gateway:       http://0.0.0.0:18790"
+echo " Provider:      $(jq -r '.providers | keys[0] // "none"' "${CONFIG_FILE}" 2>/dev/null)"
+echo " Model:         $(jq -r '.agents.defaults.model // "unknown"' "${CONFIG_FILE}" 2>/dev/null)"
 echo "=============================================="
+
+# --- Start ingress proxy (sits between HA Ingress and nanobot WebUI) ---
+echo "[INFO] Starting ingress proxy on 0.0.0.0:8099 → 127.0.0.1:8765..."
+${PYTHON} /ingress_proxy.py 2>&1 &
+PROXY_PID=$!
+echo "[INFO] Ingress proxy started (PID: ${PROXY_PID})"
 
 # --- Gateway restart loop ---
 gateway_loop() {

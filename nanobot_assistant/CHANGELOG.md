@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.2.1 (2026-05-20)
+
+### Fixed
+
+- HA Ingress could not reach the bundled WebUI: the Supervisor proxy runs in a separate network namespace, so binding nanobot to `127.0.0.1:8765` made `127.0.0.1` from Supervisor's view a different loopback than the addon's. The previous symptom was "The app is not running" in the HA panel even though the addon was healthy.
+
+### Added
+
+- `ingress_proxy.py`: a small aiohttp reverse proxy that listens on `0.0.0.0:8099` (the new `ingress_port`) and forwards HTTP + WebSocket traffic to nanobot on `127.0.0.1:8765`. It enforces two checks per request:
+  1. **Header check** — the request must carry at least one of `X-Ingress-Path` / `X-Hass-Source` (set by HA Supervisor on every Ingress-proxied request).
+  2. **Source IP check** — the peer must come from the Supervisor docker bridge (`172.30.32.0/23`) or the host loopback. Either check alone is spoofable; both together are not.
+- The proxy injects `Authorization: Bearer <secret>` only on `/webui/bootstrap`, where nanobot needs it to issue the short-lived `nbwt_…` API token. Subsequent `/api/*` and WebSocket requests already carry that token from the client and pass through unchanged.
+- `generate_config.py` now generates a 256-bit URL-safe secret at first boot, persists it under `/data/.nanobot/proxy_secret` (mode 0600), and injects it into the runtime config as `channels.websocket.tokenIssueSecret`. The proxy reads the same file at startup.
+
+### Changed
+
+- `ingress_port` switched from `8765` to `8099`. The Web UI is now reached at `https://<ha>/api/hassio_ingress/<token>/` → proxy `:8099` → nanobot `:8765`.
+- `channels.websocket.host` is now always `127.0.0.1` (pinned by `generate_config.py` on every boot); nanobot is unreachable from the LAN.
+- Healthcheck still hits `http://127.0.0.1:8765/` — if nanobot is up, the proxy will be too.
+
 ## 0.2.0 (2026-05-20)
 
 ### Changed
