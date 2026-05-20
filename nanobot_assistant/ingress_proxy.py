@@ -136,48 +136,58 @@ def _needs_secret_injection(path: str) -> bool:
     return any(path == p or path.startswith(p + "?") for p in SECRET_AUTH_PATHS)
 
 
-# Absolute-path prefixes the SPA bakes into its HTML/JS that must be rewritten
-# back through the Ingress URL. Only `="/<dir>/...` and `='/<dir>/...` forms
-# are touched; plain `/` inside text content is left alone.
-_HTML_ABS_PATH_PREFIXES = ("assets", "brand", "api", "webui")
+# Absolute-path prefixes the SPA bakes into its HTML/JS/CSS that must be
+# rewritten back through the Ingress URL. Matched only when immediately
+# preceded by a string/template-literal boundary (`"`, `'`, `` ` ``, or `}`
+# from `${…}` interpolation close) to avoid hitting unrelated `/`-prefixed
+# substrings.
+_ABS_PATH_DIRS = ("assets", "brand", "api", "webui")
 
-# Single regex, single pass — avoids the cascading-replacement bug where
-# replacing `/assets/` first injects a `/api/` substring that the next pass
-# would then rewrite again.
 _ABS_PATH_RE = re.compile(
-    rb'(?P<q>["\'])/(?P<dir>' + b"|".join(d.encode() for d in _HTML_ABS_PATH_PREFIXES) + rb')/'
+    rb"(?P<boundary>[\"'`}])/(?P<dir>"
+    + b"|".join(d.encode() for d in _ABS_PATH_DIRS)
+    + rb")/"
+)
+
+# Content types whose bodies we buffer + rewrite. JS bundle ~550 kB, HTML
+# shell ~6 kB, CSS small — all fine to load fully.
+_REWRITABLE_TYPES = (
+    "text/html",
+    "text/javascript",
+    "application/javascript",
+    "text/css",
 )
 
 
-def _rewrite_html_paths(html: bytes, ingress_prefix: str) -> bytes:
-    """Rewrite absolute paths in the SPA shell so they hit the Ingress URL.
+def _is_rewritable(content_type: str) -> bool:
+    ct = content_type.lower().split(";", 1)[0].strip()
+    return ct in _REWRITABLE_TYPES
 
-    Two changes:
-      1. Inject a `<base href="{ingress_prefix}/">` right after `<head>` so
-         relative URLs and JS that uses `document.baseURI` pick up the prefix.
-      2. Replace the well-known absolute path prefixes (`/assets/`, `/brand/`,
-         `/api/`, `/webui/`) inside `="..."` and `='...'` attributes with
-         `{ingress_prefix}/...`. `<base href>` alone is not enough because
-         browsers resolve absolute paths against the origin, not the base.
+
+def _rewrite_paths(body: bytes, content_type: str, ingress_prefix: str) -> bytes:
+    """Inject the Ingress prefix into baked-in absolute paths.
+
+    - For every `<boundary>/<dir>/…` occurrence (where boundary is `"`, `'`,
+      `` ` ``, or `}`), rewrite `/<dir>/` → `{prefix}/<dir>/`.
+    - For HTML responses only, additionally inject `<base href="{prefix}/">`
+      right after `<head>` so anything still using relative URLs (or
+      `document.baseURI`) resolves against the Ingress URL too. The base tag
+      is added after the regex pass so it isn't itself rewritten.
     """
     prefix = ingress_prefix.rstrip("/").encode("utf-8")
     if not prefix:
-        return html
+        return body
 
-    # 1. Rewrite all `="/<dir>/...` and `='/<dir>/...` in one pass.
     def _sub(m: re.Match) -> bytes:
-        return m.group("q") + prefix + b"/" + m.group("dir") + b"/"
+        return m.group("boundary") + prefix + b"/" + m.group("dir") + b"/"
 
-    html = _ABS_PATH_RE.sub(_sub, html)
+    out = _ABS_PATH_RE.sub(_sub, body)
 
-    # 2. Inject <base> AFTER the path-rewrite pass so the regex above doesn't
-    # itself match the `/api/...` URL we just injected. Idempotent: skip if
-    # the upstream already emitted a <base>.
-    if b"<base " not in html:
+    if content_type.lower().startswith("text/html") and b"<base " not in out:
         base_tag = b'<head><base href="' + prefix + b'/">'
-        html = html.replace(b"<head>", base_tag, 1)
+        out = out.replace(b"<head>", base_tag, 1)
 
-    return html
+    return out
 
 
 # --- HTTP proxy ------------------------------------------------------------
@@ -206,14 +216,14 @@ async def _proxy_http(request: web.Request, secret: str) -> web.StreamResponse:
         timeout=ClientTimeout(total=120),
     ) as upstream:
         upstream_ct = upstream.headers.get("Content-Type", "")
-        is_html = upstream_ct.lower().startswith("text/html") and ingress_prefix
+        should_rewrite = ingress_prefix and _is_rewritable(upstream_ct)
 
-        if is_html:
-            # Buffer the full HTML to rewrite paths; re-emit with new
-            # Content-Length and without the upstream's compressed-encoding
+        if should_rewrite:
+            # Buffer the full body to rewrite paths; re-emit with new
+            # Content-Length and without the upstream's content-encoding
             # (aiohttp transparently decompresses, so we send plain bytes).
             raw = await upstream.read()
-            patched = _rewrite_html_paths(raw, ingress_prefix)
+            patched = _rewrite_paths(raw, upstream_ct, ingress_prefix)
             out_headers = []
             for k, v in _filter_headers(upstream.headers.items()):
                 lk = k.lower()
@@ -221,13 +231,12 @@ async def _proxy_http(request: web.Request, secret: str) -> web.StreamResponse:
                     continue
                 out_headers.append((k, v))
             out_headers.append(("Content-Length", str(len(patched))))
-            response = web.Response(
+            return web.Response(
                 body=patched,
                 status=upstream.status,
                 reason=upstream.reason,
                 headers=dict(out_headers),
             )
-            return response
 
         response = web.StreamResponse(
             status=upstream.status,

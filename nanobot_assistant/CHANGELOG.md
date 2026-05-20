@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.3 (2026-05-20)
+
+### Fixed
+
+- The bundled WebUI's JS bundle calls `fetch(\`${e}/webui/bootstrap\`, …)` with `e` defaulting to `""`, so bootstrap (and the other `/api/*` calls it makes) hit the HA host root and 404'd. Symptom in the UI: "Couldn't reach nanobot — bootstrap failed: HTTP 404".
+
+### Changed
+
+- `ingress_proxy.py` now also rewrites `text/javascript`, `application/javascript`, and `text/css` responses, not just HTML. The same regex matches `/<dir>/` immediately after a string boundary (`"`, `'`, `` ` ``, or `}` from a `${…}` template-literal interpolation close), so both bare string literals (`"/assets/imageEncode.worker-…"`, `"/brand/nanobot_logo.png"`) and template-literal segments (`\`${e}/api/settings\``) get the Ingress prefix injected.
+- `<base href>` is still only injected into HTML; for JS/CSS, the path rewrite alone is enough.
+
 ## 0.2.2 (2026-05-20)
 
 ### Fixed
